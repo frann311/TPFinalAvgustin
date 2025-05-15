@@ -1,0 +1,103 @@
+@model TPFinalAvgustin.Models.PerfilViewModel
+@{
+    ViewData["Title"] = "Mi Perfil";
+}
+
+<h2>Mi Perfil</h2>
+
+<div class="row">
+    <!-- Izquierda: datos y avatar -->
+    <div class="col-md-6">
+        <form asp-action="EditProfile" method="post" enctype="multipart/form-data">
+            <input asp-for="Id" type="hidden" />
+
+            <div class="form-group">
+                <label asp-for="Nombre">Nombre</label>
+                <input asp-for="Nombre" class="form-control" />
+                <span asp-validation-for="Nombre" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Apellido">Apellido</label>
+                <input asp-for="Apellido" class="form-control" />
+                <span asp-validation-for="Apellido" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Email">Email</label>
+                <input asp-for="Email" class="form-control" />
+                <span asp-validation-for="Email" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <label asp-for="Perfil">Descripción</label>
+                <textarea asp-for="Perfil" class="form-control" rows="4"
+                    style="resize: none; height: 120px;"></textarea>
+                <span asp-validation-for="Perfil" class="text-danger"></span>
+            </div>
+
+            <hr />
+
+            <div class="form-group">
+                <label>Avatar actual</label><br />
+                @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+                {
+                    <img src="@Model.AvatarUrl" class="rounded-circle mb-3"
+                        style="width: 150px; height: 150px; object-fit: cover;" alt="Avatar" />
+
+                    <div class=" form-check mt-2">
+                        <input asp-for="RemoveAvatar" class="form-check-input" />
+                        <label asp-for="RemoveAvatar" class="form-check-label">Quitar avatar</label>
+                    </div>
+                }
+                else
+                {
+                    <p><em>No tenés avatar.</em></p>
+                }
+            </div>
+
+            <div class="form-group">
+                <label asp-for="AvatarFile">Subir nueva foto</label>
+                <input asp-for="AvatarFile" type="file" class="form-control" />
+                <span asp-validation-for="AvatarFile" class="text-danger"></span>
+            </div>
+
+            <button type="submit" class="btn btn-primary mt-2">Guardar Datos</button>
+        </form>
+    </div>
+
+    <!-- Derecha: cambio de contraseña -->
+    <div class="col-md-6">
+        <form asp-action="EditPassword" method="post">
+            <input asp-for="Id" type="hidden" />
+
+            <div class="form-group">
+                <label asp-for="CurrentPassword">Contraseña Actual</label>
+                <input asp-for="CurrentPassword" class="form-control" type="password" />
+                <span asp-validation-for="CurrentPassword" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="NewPassword">Nueva Contraseña</label>
+                <input asp-for="NewPassword" class="form-control" type="password" />
+                <span asp-validation-for="NewPassword" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="ConfirmPassword">Confirmar Contraseña</label>
+                <input asp-for="ConfirmPassword" class="form-control" type="password" />
+                <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+            </div>
+
+            <button type="submit" class="btn btn-danger mt-2">Cambiar Contraseña</button>
+        </form>
+    </div>
+</div>
+
+@*boton para volver *@
+<div class="mt-4">
+    <a asp-action="Index" class="btn btn-secondary">Volver</a>
+</div>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}
