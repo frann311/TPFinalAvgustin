@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/TPFinalAvgustin.styles.css" asp-append-version="true" />
+
 </head>
 
 <body>
@@ -30,8 +31,20 @@
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
 
                         <li class="nav-item">
-                            <a class="nav-link">xxx</a>
+                            <a class="nav-link" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Propuesta" asp-action="Index">Propuestas</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Contrato" asp-action="Index">Contratos</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Pago" asp-action="Index">Pagos</a>
+                        </li>
+
+
+
 
                     </ul>
 
@@ -40,7 +53,7 @@
                             @if (User.Identity.IsAuthenticated)
                             {
                                 <span class="navbar-text">
-                                    <a class="" asp-controller="Perfil" asp-action="Index">@User.Identity.Name!</a>
+                                    <a class="" asp-controller="Perfil" asp-action="Index">@User.Identity.Name</a>
                                     <img src="@avatarUrl" class="rounded-circle mb-3"
                                         style="width: 40px; height: 40px; object-fit: cover;" alt="Avatar" />
                                 </span>
@@ -71,6 +84,12 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @* <!-- CDN de Vue 3 en modo desarrollo: -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- CDN de Axios para las peticiones HTTP -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script> *@
+
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 

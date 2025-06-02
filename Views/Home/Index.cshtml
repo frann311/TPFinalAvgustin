@@ -1,8 +1,354 @@
-﻿@{
-    ViewData["Title"] = "Home Page";
+﻿@using System.Security.Claims
+@{
+    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.png";
+    var VacantesCreadasCount = ViewBag.VacantesCreadasCount ?? 0;
+    var PropuestasEnviadasCount = ViewBag.PropuestasEnviadasCount ?? 0;
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="container mt-4" id="vacantes-app">
+    <div class="row">
+        <!-- Columna izquierda -->
+        <div class="col-md-3">
+            <!-- Usuario y menús -->
+            <div class="card mb-3">
+                <div class="card-body text-center">
+                    <img src="@avatarUrl" class="rounded-circle mb-2"
+                        style="width:100px; height:100px; object-fit:cover;" alt="Avatar" />
+                    <h5 class="card-title">@User.Identity.Name</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item"><a href="#" @@click.prevent="switchView('listAll')">Inicio</a></li>
+                    <li class="list-group-item"><a href="#" @@click.prevent="switchView('listMine')">Mis Vacantes:
+                            <strong>(@(VacantesCreadasCount))</strong></a></li>
+                    @*<li class="list-group-item"><a asp-controller="Propuesta" asp-action="Index">Mis Propuestas:
+                            <strong>(@(PropuestasEnviadasCount))</strong></a></li>
+                    <li class="list-group-item"><a asp-controller="Perfil" asp-action="Index">Mi perfil</a></li> *@
+                </ul>
+            </div>
+        </div>
+
+        <!-- Columna central: buscador + listado -->
+        <div class="col-md-6">
+            <h2>{{ title }}</h2>
+            <div class="mb-3">
+                <input type="text" v-model="filter" class="form-control" placeholder="Buscar vacantes..." />
+            </div>
+            <div v-if="lastList==='listMine'" class="mb-3">
+                <button class="btn btn-primary w-100" @@click="startCreateVacante()">
+                    Crear Vacante
+                </button>
+            </div>
+
+            <div v-if="!loading && items.length === 0" class="text-center text-muted">No se encontraron vacantes.</div>
+            <div v-if="loading" class="text-center">
+                <div class="spinner-border" role="status"><span class="visually-hidden">Cargando...</span></div>
+            </div>
+            <div v-for="v in items" :key="v.id" class="card mb-2" @@click="selectVacante(v)"
+                :class="{ 'border-primary': selected && selected.id === v.id }" style="cursor:pointer;">
+                <div class="card-body">
+                    <h5 class="card-title">{{ v.titulo }}</h5>
+                    <p class="card-text text-truncate">{{ v.descripcion }}</p>
+                    <p class="mb-0"><small class="text-muted">Monto: {{ v.monto }}</small></p>
+                    <p class="mb-0"><small class="text-muted">Fecha expiración: {{ formatDate(v.fechaExpiracion)
+                            }}</small></p>
+                </div>
+            </div>
+            <nav v-if="totalPages > 1" aria-label="Paginación">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item" :class="{ disabled: page === 1 }"><a class="page-link" href="#"
+                            @@click.prevent="changePage(page - 1)">«</a></li>
+                    <li class="page-item" v-for="p in totalPages" :key="p" :class="{ active: p === page }"><a
+                            class="page-link" href="#" @@click.prevent="changePage(p)">{{ p }}</a></li>
+                    <li class="page-item" :class="{ disabled: page === totalPages }"><a class="page-link" href="#"
+                            @@click.prevent="changePage(page + 1)">»</a></li>
+                </ul>
+            </nav>
+        </div>
+
+        <!-- Columna derecha: panel dinámico -->
+        <div class="col-md-3">
+            <!-- VacanteForm (create/edit) -->
+            <vacante-form v-if="viewState === 'createVac' || viewState === 'editVac'"
+                :key="(vacanteToEdit?.id || 'new') + viewState" :vacante-editar="vacanteToEdit" @@creado="onSaved"
+                @@cancelar="switchView(selected ? 'detail' : 'none')">
+            </vacante-form>
+            <!-- PropuestaForm -->
+            <propuesta-form v-else-if="viewState === 'createProp'" :vacante-id="selected?.id" @@creado="onPropSaved"
+                @@cancelar="switchView('detail')">
+            </propuesta-form>
+            <!-- Detalle vacante -->
+            <div v-else-if="viewState === 'detail' && selected" class="card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ selected.titulo }}</h5>
+                    <p class="card-text">{{ selected.descripcion }}</p>
+                    <p><strong>Monto:</strong> {{ selected.monto }}</p>
+                    <p><strong>Expira:</strong> {{ formatDate(selected.fechaExpiracion) }}</p>
+                    <button v-if="!selected.esMio" class="btn btn-primary w-100"
+                        @@click="switchView('createProp')">Enviar propuesta</button>
+                    <div v-else class="mt-2">
+                        <button class="btn btn-sm btn-warning" @@click="startEdit(selected)">Editar</button>
+                        <button class="btn btn-sm btn-danger ms-2"
+                            @@click="deleteVacante(selected.id)">Eliminar</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Mensaje predeterminado -->
+            <div v-else class="text-center text-muted">Selecciona una vacante para ver detalles</div>
+        </div>
+    </div>
 </div>
+
+@section Scripts {
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const { createApp, ref, computed, watch } = Vue;
+
+        const VacanteForm = {
+            props: {
+                vacanteEditar: { type: Object, default: null }
+            },
+            template: `
+                                                                                                                                                                    <div class="card">
+                                                                                                                                                                      <div class="card-body">
+                                                                                                                                                                        <h5 class="card-title">{{ vacanteEditar ? 'Editar Vacante' : 'Crear Vacante' }}</h5>
+                                                                                                                                                                        <form @@submit.prevent="enviarFormulario">
+                                                                                                                                                                          <div class="mb-3">
+                                                                                                                                                                            <input v-model="form.titulo" class="form-control" placeholder="Título" required>
+                                                                                                                                                                          </div>
+                                                                                                                                                                          <div class="mb-3">
+                                                                                                                                                                            <textarea v-model="form.descripcion" class="form-control" placeholder="Descripción" required></textarea>
+                                                                                                                                                                          </div>
+                                                                                                                                                                          <div class="mb-3">
+                                                                                                                                                                            <input v-model.number="form.monto" type="number" class="form-control" placeholder="Monto" required>
+                                                                                                                                                                          </div>
+                                                                                                                                                                          <div class="mb-3">
+                                                                                                                                                                            <input v-model="form.fechaExpiracion" type="date" class="form-control" required>
+                                                                                                                                                                          </div>
+                                                                                                                                                                          <button type="submit" class="btn btn-success w-100">Guardar</button>
+                                                                                                                                                                          <button type="button" class="btn btn-secondary w-100 mt-2" @@click="$emit('cancelar')">Cancelar</button>
+                                                                                                                                                                        </form>
+                                                                                                                                                                      </div>
+                                                                                                                                                                    </div>
+                                                                                                                                                                  `,
+            data() {
+                return {
+                    form: {
+                        titulo: this.vacanteEditar?.titulo || '',
+                        descripcion: this.vacanteEditar?.descripcion || '',
+                        monto: this.vacanteEditar?.monto || null,
+                        fechaExpiracion: this.vacanteEditar ? this.vacanteEditar.fechaExpiracion.substring(0, 10) : null
+                    },
+                    error: null
+                };
+            },
+            methods: {
+                async enviarFormulario() {
+                    try {
+                        const url = this.vacanteEditar
+                            ? `/api/vacantes/${this.vacanteEditar.id}`
+                            : '/api/vacantes';
+                        const method = this.vacanteEditar ? 'put' : 'post';
+                        if (!this.vacanteEditar) {
+                            this.form.usuarioId = @Html.Raw(Json.Serialize(Model?.Id ?? 0));
+                            this.form.fechaExpiracion = new Date(this.form.fechaExpiracion).toISOString();
+                        }
+                        const res = await axios({ method, url, data: this.form, headers: { 'Content-Type': 'application/json' } });
+                        if (res.status === 200 || res.status === 201 || res.status === 204) {
+                            this.$emit('creado', res.data);
+                        }
+                    } catch (e) {
+                        console.error('Error guardando vacante:', e.response?.data);
+                        this.error = e.response?.data?.message || 'Error al guardar vacante';
+                    }
+                }
+            }
+        };
+
+
+        const PropuestaForm = {
+            props: {
+                propuestaEditar: { type: Object, default: null },
+                vacanteId: { type: Number, required: true }
+            },
+            template: `
+                                        <div class="card">
+                                          <div class="card-body">
+                                            <h5 class="card-title">
+                                              {{ propuestaEditar ? 'Editar Propuesta' : 'Crear Propuesta' }}
+                                            </h5>
+                                            <form @@submit.prevent="enviarFormulario">
+                                              <div class="mb-3">
+                                                <textarea
+                                                  v-model="form.mensaje"
+                                                  class="form-control"
+                                                  placeholder="Mensaje detallado"
+                                                  required
+                                                ></textarea>
+                                              </div>
+                                              <div class="mb-3">
+                                                <input
+                                                  v-model.number="form.monto"
+                                                  type="number"
+                                                  class="form-control"
+                                                  placeholder="Monto ofrecido"
+                                                  required
+                                                >
+                                              </div>
+                                              <button type="submit" class="btn btn-success w-100">Guardar</button>
+                                              <button
+                                                type="button"
+                                                class="btn btn-secondary w-100 mt-2"
+                                                @@click="$emit('cancelar')"
+                                              >
+                                                Cancelar
+                                              </button>
+                                            </form>
+                                          </div>
+                                        </div>
+                                      `,
+            data() {
+                return {
+                    form: {
+                        titulo: this.propuestaEditar?.titulo || '',
+                        mensaje: this.propuestaEditar?.mensaje || '',
+                        monto: this.propuestaEditar?.monto || null,
+                        vacanteId: this.vacanteId
+                    },
+                    error: null
+                };
+            },
+            methods: {
+                async enviarFormulario() {
+                    try {
+                        // Inyectar el userId desde Razor:
+                        this.form.usuarioId = @Html.Raw(Json.Serialize(Model?.Id ?? 0));
+                        this.form.vacanteId = this.vacanteId;
+                        if (!this.form.vacanteId) {
+                            this.error = 'Debe seleccionar una vacante para enviar una propuesta.';
+                            return;
+                        }
+
+
+                        const url = this.propuestaEditar
+                            ? `/api/propuestas/${this.propuestaEditar.id}`
+                            : '/api/propuestas';
+                        const method = this.propuestaEditar ? 'put' : 'post';
+
+
+                        console.log('Datos que se envían:', {
+                            method,
+                            url,
+                            data: this.form
+                        });
+
+                        const res = await axios({
+                            method,
+                            url,
+                            data: this.form,
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        // Aceptar 200, 201 o 204 como éxito
+                        if ([200, 201, 204].includes(res.status)) {
+                            this.$emit('creado');
+                        }
+                    } catch (e) {
+                        console.error('Error guardando propuesta:', e.response?.data);
+                        this.error = e.response?.data?.message || 'Error al guardar propuesta';
+                    }
+                }
+            }
+        };
+
+
+        createApp({
+            components: { 'vacante-form': VacanteForm, 'propuesta-form': PropuestaForm },
+            setup() {
+                // Estado global de vista
+                const viewState = ref('listAll'); // 'none','listAll','listMine','detail','createVac','editVac','createProp'
+                const selected = ref(null);
+                const vacanteToEdit = ref(null);
+                const items = ref([]);
+                const page = ref(1), size = ref(5), total = ref(0), loading = ref(false);
+                const filter = ref('');
+                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+                esModoMisVacantes = ref(false);
+
+                const totalPages = computed(() => Math.ceil(total.value / size.value) || 1);
+                const titleMap = {
+                    listAll: 'Todas las vacantes',
+                    listMine: 'Mis vacantes',
+                    detail: 'Detalles',
+                    createVac: 'Crear Vacante',
+                    editVac: 'Editar Vacante',
+                    createProp: 'Enviar Propuesta'
+                };
+                const lastList = ref('listAll');
+                function switchView(mode) {
+                    // si entras a una lista, actualizas lastList
+                    if (mode === 'listAll' || mode === 'listMine') {
+                        lastList.value = mode;
+                        loadVacantes(mode === 'listMine');
+                    }
+                    viewState.value = mode;
+                }
+                const title = computed(() => {
+                    return lastList.value === 'listMine'
+                        ? 'Mis vacantes'
+                        : 'Todas las vacantes';
+                });
+
+
+                function startCreateVacante() {
+                    vacanteToEdit.value = null;
+                    viewState.value = 'createVac';
+                }
+                const startEdit = (v) => { vacanteToEdit.value = { ...v }; switchView('editVac'); };
+
+                const onSaved = async (savedVacante) => {
+                    // 1) Actualiza tu lista
+                    await loadVacantes(lastList.value === 'listMine');
+
+                    savedVacante.esMio = (savedVacante.usuarioId === userId.value);
+
+                    // 3) Cambia a vista detalle
+                    switchView('detail');
+                    // 2) Pon la vacante recién guardada como seleccionada
+                    selected.value = savedVacante;
+                };
+
+                const onPropSaved = () => switchView('detail');
+                const selectVacante = (v) => { selected.value = v; switchView('detail'); };
+
+                // CRUD Vacantes
+                const loadVacantes = async (mine = false) => {
+                    loading.value = true;
+                    const params = { page: page.value, size: size.value, usuarioId: mine ? userId.value : null };
+                    if (filter.value) params.search = filter.value;
+                    const res = await axios.get('/api/vacantes', { params });
+                    total.value = res.data.total;
+                    items.value = res.data.items.map(i => ({ ...i, esMio: i.usuarioId === userId.value }));
+                    loading.value = false;
+                };
+                const deleteVacante = async (id) => { await axios.delete(`/api/vacantes/${id}`); switchView('listMine'); };
+
+                // Búsqueda con debounce
+                let timer;
+                watch(filter, () => { clearTimeout(timer); timer = setTimeout(() => loadVacantes(viewState.value === 'listMine'), 300); });
+
+                // Paginación y fecha
+                const changePage = (n) => { if (n < 1 || n > totalPages.value) return; page.value = n; loadVacantes(viewState.value === 'listMine'); };
+                const formatDate = (iso) => iso ? new Date(iso).toLocaleDateString('es-AR') : '';
+
+                // Inicializar
+                loadVacantes(false);
+
+                return {
+                    viewState, items, page, totalPages, filter, loading, selected, esModoMisVacantes, lastList,
+                    title, switchView, selectVacante, startEdit, vacanteToEdit,
+                    onSaved, onPropSaved, deleteVacante, changePage, formatDate, startCreateVacante
+                };
+            }
+        }).mount('#vacantes-app');
+    </script>
+}

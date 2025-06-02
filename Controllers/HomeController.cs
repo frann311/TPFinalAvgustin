@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using TPFinalAvgustin.Models;
 
@@ -15,7 +16,17 @@ public class HomeController : Controller
 
     public IActionResult Index()
     {
-        return View();
+        var usuarioId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        // Console.WriteLine("ID de usuario: " + usuarioId);
+
+
+        var model = new Usuario
+        {
+            Id = usuarioId != null ? int.Parse(usuarioId) : 0,
+
+        };
+
+        return View(model);
     }
 
     public IActionResult Privacy()
