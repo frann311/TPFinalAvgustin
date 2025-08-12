@@ -1,46 +1,83 @@
 @model TPFinalAvgustin.Models.SigninViewModel
 @{
-    ViewData["Title"] = "Resgistrate";
+    ViewData["Title"] = "Registrarse";
 }
 
-<h2>Resgistrate</h2>
-
-<form asp-action="Signin" method="post">
-
-
-    <div class="mb-3">
-        <label asp-for="Nombre" class="form-label"></label>
-        <input asp-for="Nombre" class="form-control" />
-        <span asp-validation-for="Nombre" class="text-danger"></span>
+<div id="app" class="container mt-5" v-cloak>
+    <div class="card mx-auto" style="max-width: 500px;">
+        <div class="card-body">
+            <h2 class="card-title text-center">Crear cuenta</h2>
+            <form v-on:submit.prevent="registrar">
+                <div class="mb-3">
+                    <label class="form-label">Nombre</label>
+                    <input v-model="nombre" type="text" class="form-control" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Apellido</label>
+                    <input v-model="apellido" type="text" class="form-control" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input v-model="email" type="email" class="form-control" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Contraseña</label>
+                    <input v-model="password" type="password" class="form-control" required />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Confirmar contraseña</label>
+                    <input v-model="confirmPassword" type="password" class="form-control" required />
+                </div>
+                <button type="submit" class="btn btn-success w-100">Registrarse</button>
+                <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>
+            </form>
+        </div>
     </div>
-    <div class="mb-3">
-        <label asp-for="Apellido" class="form-label"></label>
-        <input asp-for="Apellido" class="form-control" />
-        <span asp-validation-for="Apellido" class="text-danger"></span>
-    </div>
-    <div class="mb-3">
-        <label asp-for="Email" class="form-label"></label>
-        <input asp-for="Email" class="form-control" />
-        <span asp-validation-for="Email" class="text-danger"></span>
-    </div>
-
-    <div class="mb-3">
-        <label asp-for="Password" class="form-label">Contraseña</label>
-        <input asp-for="Password" class="form-control" />
-        <span asp-validation-for="Password" class="text-danger"></span>
-    </div>
-
-    <div class="mb-3">
-        <label asp-for="ConfirmPassword" class="form-label">Confirmar contraseña</label>
-        <input asp-for="ConfirmPassword" class="form-control" />
-        <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
-    </div>
-
-    <button type="submit" class="btn btn-primary">Ingresar</button>
-</form>
+</div>
 
 @section Scripts {
-    @{
-        await Html.RenderPartialAsync("_ValidationScriptsPartial");
-    }
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        const app = Vue.createApp({
+            data() {
+                return {
+                    nombre: '',
+                    apellido: '',
+                    email: '',
+                    password: '',
+                    confirmPassword: '',
+                    error: ''
+                };
+            },
+            methods: {
+                async registrar() {
+                    this.error = '';
+                    try {
+                        const response = await axios.post('/api/signin', {
+                            nombre: this.nombre,
+                            apellido: this.apellido,
+                            email: this.email,
+                            password: this.password,
+                            confirmPassword: this.confirmPassword
+                        });
+
+                        const token = response.data.token;
+                        localStorage.setItem('token', token);
+                        localStorage.setItem('usuarioId', response.data.id);
+                        localStorage.setItem('usuarioRol', response.data.rol);
+                        document.cookie = `jwt=${token}; path=/; max-age=7200; SameSite=Lax`;
+
+                        window.location.href = '/';
+                    } catch (err) {
+                        console.error('Error al registrar:', err);
+                        this.error = err.response?.data || 'Error desconocido al registrar.';
+                    }
+                }
+            }
+        });
+
+        app.mount('#app');
+    </script>
 }

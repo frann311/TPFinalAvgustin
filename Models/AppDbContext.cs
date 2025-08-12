@@ -13,8 +13,13 @@ namespace TPFinalAvgustin.Models
         }
 
         // DbSet = colección de Vacantes en la BD
+
+        public DbSet<Archivo> Archivos { get; set; }
+        public DbSet<Pago> Pagos { get; set; }
+        public DbSet<Contrato> Contratos { get; set; }
         public DbSet<Vacante> Vacantes { get; set; }
         public DbSet<Propuesta> Propuestas { get; set; }
         public DbSet<Usuario> Usuarios { get; set; }
+
     }
 }

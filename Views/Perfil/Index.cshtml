@@ -4,7 +4,19 @@
     ViewData["Title"] = "Mi Perfil";
 }
 
-<h2 class="mb-4">Mi Perfil</h2>
+
+@if (ViewBag.IsOwnProfile)
+{
+    <div class="alert alert-info">
+        <strong>¡Bienvenido!</strong> Aquí puedes ver y editar tu perfil.
+    </div>
+}
+else
+{
+    <div class="alert alert-info">
+        <strong>Perfil de @Model.Nombre @Model.Apellido</strong>
+    </div>
+}
 
 <div class="card shadow-sm p-4">
     <div class="row">
@@ -50,11 +62,14 @@
                     <td>@Model.Perfil</td>
                 </tr>
             </table>
+            @if (ViewBag.IsOwnProfile)
+            {
+                <a asp-action="EditProfile" class="btn btn-primary">Editar Perfil</a>
+                <form method="post" asp-controller="Account" asp-action="Logout" class="d-inline">
+                    <button type="submit" class="btn btn-link">Salir</button>
+                </form>
+            }
 
-            <a asp-action="EditProfile" class="btn btn-primary">Editar Perfil</a>
-            <form method="post" asp-controller="Account" asp-action="Logout" class="d-inline">
-                <button type="submit" class="btn btn-link">Salir</button>
-            </form>
         </div>
     </div>
 </div>

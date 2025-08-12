@@ -1,0 +1,394 @@
+@{
+    ViewData["Title"] = "Contratos";
+}
+
+<div id="contratos-app" class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>{{title}}</h2>
+
+        <div>
+            <button class="btn btn-primary me-2" @@click="switchView('ContratosEnCurso')">Contratos en
+                curso</button>
+            <button class="btn btn-outline-secondary" @@click="switchView('ContratosHistorial')">Historial</button>
+        </div>
+    </div>
+
+    <div v-if="loading" class="text-center my-5">
+        <div class="spinner-border" role="status"></div>
+        <p>Cargando contratos...</p>
+    </div>
+
+    <div v-else class="row">
+        <div class="col-md-5">
+            <h4>Contratos ({{ total }})</h4>
+
+            <div v-for="c in items" :key="c.id" class="card mb-2" @@click="selectContrato(c.id)"
+                :class="{ 'border-primary': selected && selected.id === c.id }" style="cursor:pointer;">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title">{{ c.vacanteTitulo }}</h5>
+                        <span v-if="c.fechaLimite < today" class="badge bg-warning text-dark">
+                            Contrato atrasado
+                        </span>
+                    </div>
+
+
+                    <div class="d-flex align-items-center mb-3">
+                        <img :src="c.contratadoAvatar || '/img/default-avatar.png'" alt="Avatar"
+                            class="rounded-circle me-3" style="width: 30px; height: 30px; object-fit: cover;">
+                        <div>
+                            <small class="text-muted">
+                                <a :href="`/Perfil/Index/${c.contratadoId}`" class="text-decoration-none">
+                                    {{ c.contratadoNombre + ' ' + c.contratadoApellido }}
+                                </a>
+                            </small>
+
+                        </div>
+                    </div>
+
+                    <p class="mb-0"><small class="text-muted">Fecha límite: {{ formatDate(c.fechaLimite)}}</small>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-7" v-if="selected">
+            <div class="card">
+                <div class="card-body">
+
+                    <!-- Cabecera del contrato -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="card-title mb-0">Contrato #{{ selected.id }}</h4>
+                        <div>
+                            <span class="badge" :class="{
+                'bg-success': selected.isActive && !selected.isCancelled,
+                'bg-danger': selected.isCancelled,
+                'bg-secondary': !selected.isActive && !selected.isCancelled
+            }">
+                                {{ selected.isCancelled ? 'Cancelado' : selected.isActive ? 'Activo' : 'Finalizado' }}
+                            </span>
+                            <span v-if="selected.fechaLimite < today" class="badge bg-warning text-dark">
+                                Contrato atrasado
+                            </span>
+                        </div>
+
+
+                    </div>
+
+                    <!-- Fechas -->
+                    <div class="mb-3">
+                        <p><strong>Fecha de creación:</strong> {{ formatDate(selected.fechaCreacion) }}</p>
+                        <p><strong>Fecha límite:</strong> {{ formatDate(selected.fechaLimite) }}</p>
+                        <p v-if="selected.fechaFinalizacion"><strong>Finalizado el:</strong> {{
+                            formatDate(selected.fechaFinalizacion) }}
+                        </p>
+                    </div>
+
+                    <hr>
+
+                    <!-- Vacante -->
+                    <div class="mb-3">
+                        <h5>Vacante</h5>
+                        <p><strong>Título:</strong> {{ selected.vacanteTitulo }}</p>
+                        <p><strong>Descripción:</strong> {{ selected.vacanteDescripcion || 'No disponible' }}</p>
+                    </div>
+
+                    <hr>
+
+                    <!-- Propuesta -->
+                    <div class="mb-3">
+                        <h5>Propuesta</h5>
+                        <p><strong>Mensaje:</strong> {{ selected.propuestaMensaje }}</p>
+                        <p><strong>Monto:</strong> {{ selected.monto ? '$' + selected.monto : 'No especificado' }}
+                        </p>
+                    </div>
+
+                    <hr>
+
+                    <!-- Personas -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h6>Contratante</h6>
+                            <p>{{ selected.contratanteNombre }} {{ selected.contratanteApellido }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Contratado</h6>
+                            <a :href="`/Perfil/Index/${selected.contratadoId}`" class="text-decoration-none">
+                                {{ selected.contratadoNombre + ' ' + selected.contratadoApellido }}
+                            </a>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Acciones -->
+                    <div v-if="selected.isActive" class="d-flex justify-content-between mt-4">
+                        <button class="btn btn-outline-danger" @@click="abrirModal('Contrato')"
+                            :disabled="!selected.isActive || selected.isCancelled">
+                            Cancelar Contrato
+                        </button>
+
+                        <button class="btn btn-outline-primary" @@click="abrirModal('Archivos')">
+                            Ver Archivos
+                        </button>
+
+                        <button class="btn btn-success" @@click="abrirModal('Finalizar')">
+                            Finalizar Contrato
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CANCELÑAR CONTRATO -->
+    <div v-if="modalCancelarVisible"
+        class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-5" style="max-width: 500px; width: 100%;">
+            <h5 class="mb-3">Cancelar Contrato</h5>
+
+            <div class="mb-2">
+                <strong>¿Esta seguro de que desea cancelar el contrato? </strong>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-secondary" @@click="modalCancelarVisible = false">Salir</button>
+                <button class="btn btn-danger" @@click="cancelarContrato(selected.id)">Confirmar</button>
+            </div>
+        </div>
+    </div>
+    <!-- MODAL VER ARCHIVOS DEL CONTRATO -->
+    <div v-if="modalArchivosVisible"
+        class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-5" style="max-width: 500px; width: 100%;">
+            <h5 class="mb-3">Archivos del Contrato</h5>
+
+            <div v-if="archivosItem.length === 0" class="text-muted">No hay archivos disponibles.</div>
+
+            <div style="max-height: 12rem; overflow-y: auto;">
+                <ul class="list-group">
+                    <li v-for="archivo in archivosItem" :key="archivo.id" class="list-group-item">
+                        <a :href="archivo.url" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                            {{ archivo.nombre_original }}
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+
+            <div class="d-flex justify-content-end">
+                <button class="btn btn-secondary" @@click="modalArchivosVisible = false">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- MODAL fINALIZAR CONTRATO -->
+    <div v-if="modalFinalizarVisible"
+        class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-5" style="max-width: 500px; width: 100%;">
+            <h5 class="mb-3">Finalizar Contrato</h5>
+
+            <div class="mb-2">
+                <strong>¿Esta seguro de que desea Finalizar el contrato? </strong>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-secondary" @@click="modalFinalizarVisible = false">Salir</button>
+                <button class="btn btn-success" @@click="finalizarContrato(selected.id)">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const archivosItem = ref([]);
+                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+                const items = ref([]);
+                const loading = ref(false);
+                const selected = ref(null);
+                const total = ref(0);
+                const viewState = ref('ContratosEnCurso');
+                const title = ref("Mis Contratos");
+                const today = new Date().toISOString().split('T')[0]; // formato YYYY-MM-DD
+
+
+                function formatDate(fecha) {
+                    return new Date(fecha).toLocaleDateString();
+                }
+
+                async function selectContrato(c) {
+                    try {
+                        loading.value = true;
+                        const response = await axios.get(`/api/contratos/${c}`);
+                        selected.value = response.data;
+                        console.log("Contrato seleccionado:", selected.value);
+                    } catch (error) {
+                        console.error("Error al seleccionar contrato:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+
+                }
+
+                async function loadContratosEnCurso() {
+                    loading.value = true;
+                    items.value = [];
+
+                    try {
+                        const ContratanteId = userId.value;
+                        console.log("Cargando contratos en curso para el usuario:", ContratanteId);
+                        const { data } = await axios.get(`/api/contratos/en-curso/${ContratanteId}`
+                        );
+                        items.value = data.items;
+                        total.value = data.total;
+                        console.log("contratos en curso cargados:", total.value);
+                        console.log("Contratos en curso:", items.value);
+                    } catch (error) {
+                        console.error("Error al cargar contratos en curso:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+                }
+
+                async function loadContratosHistorial() {
+                    loading.value = true;
+                    items.value = [];
+                    try {
+                        const ContratanteId = userId.value;
+                        console.log("Cargando historial de contratos para el usuario:", ContratanteId);
+                        const { data } = await axios.get(`/api/contratos/historial/${ContratanteId}`);
+                        items.value = data.items;
+                        total.value = data.total;
+                        console.log("Historial de contratos cargados:", total.value);
+                        console.log("Historial de contratos:", items.value);
+                    } catch (error) {
+                        console.error("Error al cargar historial de contratos:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+                }
+
+                function switchView(mode) {
+                    selected.value = null;
+                    viewState.value = mode;
+                    if (mode === 'ContratosEnCurso') {
+                        loadContratosEnCurso();
+                        title.value = "Contratos en Curso";
+                    } else if (mode === 'ContratosHistorial') {
+                        loadContratosHistorial();
+                        title.value = "Historial de Contratos";
+                    }
+                }
+
+                async function cancelarContrato(id) {
+
+
+                    try {
+                        loading.value = true;
+                        await axios.post(`/api/contratos/cancelar/${id}`);
+                        items.value = items.value.filter(c => c.id !== id);
+                        selected.value = null;
+
+                    } catch (error) {
+                        console.error("Error al cancelar contrato:", error);
+
+                    } finally {
+                        loading.value = false;
+                        modalCancelarVisible.value = false; // Cerrar modal después de cancelar
+                    }
+                }
+                async function finalizarContrato(id) {
+                    try {
+                        loading.value = true;
+
+
+                        await axios.patch(`/api/contratos/finalizar/${id}`);
+
+                        // Actualizar frontend
+                        items.value = items.value.filter(c => c.id !== id);
+                        selected.value = null;
+
+                    } catch (error) {
+                        console.error("Error al finalizar contrato:", error);
+                    } finally {
+                        loading.value = false;
+                        modalFinalizarVisible.value = false;
+                    }
+                }
+
+                async function obtenerArchivos() {
+                    archivosItem.value = [];
+                    try {
+                        const archivos = await axios.get(`/api/archivos/${selected.value.id}`);
+                        archivosItem.value = archivos.data;
+                        console.log("Archivos obtenidos:", archivosItem.value);
+                    } catch (error) {
+                        console.error(error);
+                    }
+                }
+
+
+
+                // Modales
+                const modalCancelarVisible = ref(false);
+                const modalArchivosVisible = ref(false);
+                const modalFinalizarVisible = ref(false);
+                const abrirModal = (tipo) => {
+                    if (tipo === 'Contrato') {
+                        modalArchivosVisible.value = false;
+                        modalFinalizarVisible.value = false;
+                        modalCancelarVisible.value = true;
+                    } else if (tipo === 'Archivos') {
+                        modalCancelarVisible.value = false;
+                        modalFinalizarVisible.value = false;
+                        archivosItem.value = [];
+                        obtenerArchivos();
+                        modalArchivosVisible.value = true;
+                    } else if (tipo === 'Finalizar') {
+                        modalCancelarVisible.value = false;
+                        modalArchivosVisible.value = false;
+                        // Lógica para abrir modal de finalizar contrato
+                        modalFinalizarVisible.value = true;
+                    }
+                };
+
+
+
+                switchView('ContratosEnCurso');
+
+
+                return {
+                    userId,
+                    items,
+                    loading,
+                    selected,
+                    total,
+                    viewState,
+                    selectContrato,
+                    switchView,
+                    formatDate,
+                    cancelarContrato,
+                    abrirModal,
+                    modalCancelarVisible,
+                    modalArchivosVisible,
+                    modalFinalizarVisible,
+                    title,
+                    today,
+                    finalizarContrato,
+                    archivosItem,
+                    obtenerArchivos,
+                };
+            }
+        }).mount('#contratos-app');
+    </script>
+}

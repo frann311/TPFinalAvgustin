@@ -32,7 +32,7 @@
                 </div>
                 <ul class="list-group list-group-flush">
                     <li class="list-group-item d-flex justify-content-between align-items-center"
-                        v-for="vacante in items" :key="vacante.id" @@click="seleccionarVacante(vacante)">
+                        v-for="vacante in itemsVacantes" :key="vacante.id" @@click="seleccionarVacante(vacante)">
                         <span>{{ vacante.titulo }}</span>
                         <span class="badge bg-secondary rounded-pill">{{ vacante.propuestasCount }}</span>
                     </li>
@@ -52,10 +52,39 @@
             </div>
 
             <ul class="list-group" v-if="viewState==='PropuestasEnviadas' ">
-                <li v-for="p in items" :key="p.id" class="list-group-item list-group-item-action"
-                    :class="{ active: selected && selected.id===p.id }" @@click="selectPropuesta(p)">
+                <li v-for="p in items" :key="p.id" class="list-group-item list-group-item-action position-relative"
+                    :class="{ active: selected && selected.id === p.id }" @@click="selectPropuesta(p)">
+
+                    <!-- Badge de estado -->
+                    <span v-if="p.isAceptada" class="badge bg-success position-absolute top-0 end-0 m-2">
+                        Aceptada
+                    </span>
+                    <span v-else class="badge bg-secondary position-absolute top-0 end-0 m-2">
+                        Pendiente
+                    </span>
+
+                    <!-- Contenido principal -->
                     <strong>{{ p.vacante.titulo }}</strong>
-                    <br><small class="text-muted">Enviado: {{ formatDate(p.fechaEnvio) }}</small>
+                    <br>
+                    <small class="text-muted">Enviado: {{ formatDate(p.fechaEnvio) }}</small>
+                </li>
+            </ul>
+            <ul class="list-group" v-if="viewState==='PropuestasRecibidas' ">
+                <li v-for="p in items" :key="p.id" class="list-group-item list-group-item-action position-relative"
+                    :class="{ active: selected && selected.id === p.id }" @@click="selectPropuesta(p)">
+
+                    <!-- Badge de estado -->
+                    <span v-if="p.isAceptada" class="badge bg-success position-absolute top-0 end-0 m-2">
+                        Aceptada
+                    </span>
+                    <span v-else class="badge bg-secondary position-absolute top-0 end-0 m-2">
+                        Pendiente
+                    </span>
+
+                    <!-- Contenido principal -->
+                    <strong>{{ p.mensaje }}</strong>
+                    <br>
+                    <small class="text-muted">Enviado: {{ formatDate(p.fechaEnvio) }}</small>
                 </li>
             </ul>
             <nav v-if="totalPages>1" class="mt-3">
@@ -76,7 +105,7 @@
         <!-- Columna derecha: detalle de propuesta seleccionada -->
         <div class="col-md-3">
             <!-- Detalle de propuesta -->
-            <div v-if="selected" class="card">
+            <div v-if="selected && viewState==='PropuestasEnviadas' " class="card">
                 <div class="card-body">
                     <h4 class="card-title">Vacante</h4>
                     <h5 class="card-title">{{ selected.vacante.titulo }}</h5>
@@ -96,10 +125,80 @@
                     </p>
                 </div>
             </div>
+
+            <div v-if="selected && viewState === 'PropuestasRecibidas'" class="card mt-3 shadow-sm">
+                <div class="card-body">
+                    <!-- Perfil del usuario -->
+                    <div class="d-flex align-items-center mb-3">
+                        <img :src="selected.usuario.avatarUrl || '/img/default-avatar.png'" alt="Avatar"
+                            class="rounded-circle me-3" style="width: 40px; height: 40px; object-fit: cover;">
+                        <div>
+                            <small class="text-muted">
+                                <a :href="`/Perfil/Index/${selected.usuario.id}`" class="text-decoration-none">
+                                    {{ selected.usuario.nombre }} {{ selected.usuario.apellido }}
+                                </a>
+                            </small>
+
+                        </div>
+                    </div>
+
+                    <!-- Propuesta -->
+
+                    <p><strong>Mensaje:</strong></p>
+                    <p class="fst-italic">{{ selected.mensaje }}</p>
+
+                    <p><strong>Monto Ofrecido:</strong> ${{ selected.monto }}</p>
+                    <p><strong>Fecha de Envío:</strong> {{ formatDate(selected.fechaEnvio) }}</p>
+
+                    <p><strong>Estado:</strong>
+                        <span v-if="selected.isAceptada" class="badge bg-success">Aceptada</span>
+                        <span v-else-if="selected.isRechazada" class="badge bg-danger">Rechazada</span>
+                        <span v-else class="badge bg-secondary">Pendiente</span>
+                    </p>
+
+                    <!-- Botón para crear contrato -->
+                    <div class="text-end mt-4">
+                        <button v-if="!selected.isAceptada" @@click="abrirModalContrato"
+                            class="btn btn-outline-success">
+                            Crear Contrato
+                        </button>
+
+                    </div>
+                </div>
+            </div>
+
             <div v-else class="text-center text-muted mt-3">Selecciona una propuesta</div>
         </div>
     </div>
+
+    <!-- MODAL CREAR CONTRATO -->
+    <div v-if="modalVisible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-5 w-100" style="max-width: 500px;">
+            <h5 class="mb-3">Crear Contrato</h5>
+
+            <div class="mb-2">
+                <strong>Vacante:</strong> {{ selected.vacante?.titulo }}
+            </div>
+            <div class="mb-2">
+                <strong>Monto Ofrecido:</strong> ${{ selected.monto }}
+            </div>
+            <div v-if="error" class="alert alert-danger">{{ error }}</div>
+            <div class="mb-3">
+                <label>Fecha límite de entrega:</label>
+                <input v-model="fechaLimite" type="date" class="form-control mt-1" />
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-secondary" @@click="modalVisible = false">Cancelar</button>
+                <button class="btn btn-success" @@click="crearContrato">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
 </div>
+
+
+
 
 @section Scripts {
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
@@ -109,11 +208,13 @@
         createApp({
             setup() {
                 const items = ref([]);
+                const itemsVacantes = ref([]);
                 const selected = ref(null);
                 const page = ref(1);
                 const size = ref(5);
                 const total = ref(0);
                 const loading = ref(false);
+                const error = ref(null);
                 const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
                 const lastList = ref('PropuestasEnviadas');
                 const viewState = ref('PropuestasEnviadas');
@@ -129,10 +230,16 @@
                     if (viewState.value === 'PropuestasRecibidas') return 'No tienes propuestas recibidas.';
                     return '';
                 });
+                const validarFecha = (dateStr) => {
+                    const today = new Date();
+                    const inputDate = new Date(dateStr);
+                    return inputDate > today;
+                }
 
 
                 function switchView(mode) {
                     // si entras a una lista, actualizas lastList
+                    selected.value = null; // resetea la propuesta seleccionada
                     if (mode === 'PropuestasEnviadas') {
                         lastList.value = mode;
                         viewState.value = mode;
@@ -151,7 +258,7 @@
                         const params = { usuarioId: userId.value };
                         const { data } = await axios.get('/api/vacantes/mis-vacantes-con-propuestas', { params });
 
-                        items.value = data;
+                        itemsVacantes.value = data;
                     } catch (error) {
                         console.error("Error al cargar vacantes con propuestas", error);
                     } finally {
@@ -163,28 +270,24 @@
                     selected.value = null; // resetea la propuesta seleccionada
                     items.value = []; // limpia las propuestas actuales
                     loadPropuestas(vacante.id);
-
                 }
-
-
-
-
-
-
-
-
 
 
 
                 async function loadPropuestas(vacanteId = null) {
                     loading.value = true;
+                    items.value = [];
                     const params = { page: page.value, size: size.value, usuarioId: userId.value };
                     if (vacanteId) params.vacanteId = vacanteId;
-                    const { data } = await axios.get('/api/propuestas', { params });
+
+                    const { data } = await axios.get('/api/propuestas/listar', { params });
+
                     total.value = data.total;
+
                     // asegurarse de incluir relaciones: vacante y usuario
                     items.value = data.items;
-                    loading.value = false;
+                    @* console.log("Propuestas cargadas:", items.value); *@
+                        loading.value = false;
                 }
 
                 function selectPropuesta(p) {
@@ -197,7 +300,77 @@
                 }
 
                 loadPropuestas();
-                return { items, selected, page, totalPages, loading, nonItemaText, title, selectPropuesta, seleccionarVacante, changePage, formatDate, viewState, switchView };
+
+                // Modal logic
+                const modalVisible = ref(false);
+                const fechaLimite = ref(null);
+
+                function abrirModalContrato() {
+                    if (!selected.value) return;
+                    fechaLimite.value = null;
+                    modalVisible.value = true;
+                }
+                async function crearContrato() {
+                    if (!selected.value || !fechaLimite.value) {
+                        error.value = "selecciona una propuesta y establece una fecha límite."
+
+                        return;
+                    }
+                    const isValidDate = validarFecha(fechaLimite.value);
+                    if (!isValidDate) {
+                        error.value = "La fecha límite debe ser una fecha futura.";
+                        return;
+                    }
+
+                    try {
+                        const today = new Date();
+                        const contratoData = {
+                            PropuestaId: selected.value.id,
+                            FechaLimite: fechaLimite.value,
+                            FechaCreacion: today.toISOString().split('T')[0],
+                            isActive: true,
+                            isCancelled: false,
+                            ContratanteId: userId.value,
+                            ContratadoId: selected.value.usuario.id
+                        }
+                        console.log("Datos del contrato a crear:", contratoData);
+                        console.log("monto:", selected.value.monto);
+                        const response = await axios.post('/api/contratos', {
+                            contrato: contratoData,
+                            monto: selected.value.monto
+                        });
+                        console.log("Contrato creado:", response.data);
+
+                        if (response.status === 201 || response.status === 200) {
+                            // recargar las propuestas
+                            await loadPropuestas(selected.value.vacanteId);
+                            const prop = selected.value;
+                            selected.value = null; // resetea la propuesta seleccionada
+                            selectPropuesta(prop); // vuelve a seleccionar la propuesta creada
+                            try {
+                                await axios.patch(`/api/propuestas/${selected.value.id}/aceptar`, {
+                                    propuestaId: selected.value.id,
+                                });
+
+
+                            } catch (error) {
+                                console.error("contrato creado, propuesta no aceptada:", error);
+                                alert("contrato creado, propuesta no aceptada");
+                            }
+
+                        }
+
+
+                        modalVisible.value = false;
+
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error al crear contrato");
+                    }
+                }
+
+
+                return { items, itemsVacantes, selected, page, totalPages, loading, nonItemaText, title, selectPropuesta, seleccionarVacante, changePage, formatDate, viewState, switchView, abrirModalContrato, crearContrato, modalVisible, fechaLimite, error };
             }
         }).mount('#propuestas-app');
     </script>

@@ -1,6 +1,13 @@
 ﻿@using System.Security.Claims
 @{
-    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.png";
+    string? avatarUrl = "/img/default-avatar.jpg";
+    string? userId = null;
+
+    if (User.Identity != null && User.Identity.IsAuthenticated)
+    {
+        avatarUrl = User.FindFirstValue("AvatarUrl") ?? avatarUrl;
+        userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -40,6 +47,9 @@
                             <a class="nav-link" asp-controller="Contrato" asp-action="Index">Contratos</a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" asp-controller="Contrato" asp-action="task">Tareas</a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" asp-controller="Pago" asp-action="Index">Pagos</a>
                         </li>
 
@@ -53,7 +63,9 @@
                             @if (User.Identity.IsAuthenticated)
                             {
                                 <span class="navbar-text">
-                                    <a class="" asp-controller="Perfil" asp-action="Index">@User.Identity.Name</a>
+                                    <a asp-controller="Perfil" asp-action="Index" asp-route-id="@userId">
+                                        @User.Identity.Name
+                                    </a>
                                     <img src="@avatarUrl" class="rounded-circle mb-3"
                                         style="width: 40px; height: 40px; object-fit: cover;" alt="Avatar" />
                                 </span>

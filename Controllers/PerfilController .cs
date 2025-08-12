@@ -22,12 +22,12 @@ public class PerfilController : Controller
 
     // GET: /Perfil
     [Authorize]
-    public IActionResult Index()
+    public IActionResult Index(int id)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
-        var u = _repo.ObtenerPorId(userId);
+        var u = _repo.ObtenerPorId(id);
         if (u == null) return NotFound();
-
+        // Verificar si el usuario logueado es el mismo que el del perfil
+        ViewBag.IsOwnProfile = (u.Id == int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!));
         return View(u); // Pasamos directamente el modelo Usuario
     }
 

@@ -1,6 +1,6 @@
 ﻿@using System.Security.Claims
 @{
-    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.png";
+    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.jpg";
     var VacantesCreadasCount = ViewBag.VacantesCreadasCount ?? 0;
     var PropuestasEnviadasCount = ViewBag.PropuestasEnviadasCount ?? 0;
 }
@@ -18,8 +18,8 @@
                 </div>
                 <ul class="list-group list-group-flush">
                     <li class="list-group-item"><a href="#" @@click.prevent="switchView('listAll')">Inicio</a></li>
-                    <li class="list-group-item"><a href="#" @@click.prevent="switchView('listMine')">Mis Vacantes:
-                            <strong>(@(VacantesCreadasCount))</strong></a></li>
+                    <li class="list-group-item"><a href="#" @@click.prevent="switchView('listMine')">Mis Vacantes</a>
+                    </li>
                     @*<li class="list-group-item"><a asp-controller="Propuesta" asp-action="Index">Mis Propuestas:
                             <strong>(@(PropuestasEnviadasCount))</strong></a></li>
                     <li class="list-group-item"><a asp-controller="Perfil" asp-action="Index">Mi perfil</a></li> *@
@@ -109,28 +109,30 @@
                 vacanteEditar: { type: Object, default: null }
             },
             template: `
-                                                                                                                                                                    <div class="card">
-                                                                                                                                                                      <div class="card-body">
-                                                                                                                                                                        <h5 class="card-title">{{ vacanteEditar ? 'Editar Vacante' : 'Crear Vacante' }}</h5>
-                                                                                                                                                                        <form @@submit.prevent="enviarFormulario">
-                                                                                                                                                                          <div class="mb-3">
-                                                                                                                                                                            <input v-model="form.titulo" class="form-control" placeholder="Título" required>
-                                                                                                                                                                          </div>
-                                                                                                                                                                          <div class="mb-3">
-                                                                                                                                                                            <textarea v-model="form.descripcion" class="form-control" placeholder="Descripción" required></textarea>
-                                                                                                                                                                          </div>
-                                                                                                                                                                          <div class="mb-3">
-                                                                                                                                                                            <input v-model.number="form.monto" type="number" class="form-control" placeholder="Monto" required>
-                                                                                                                                                                          </div>
-                                                                                                                                                                          <div class="mb-3">
-                                                                                                                                                                            <input v-model="form.fechaExpiracion" type="date" class="form-control" required>
-                                                                                                                                                                          </div>
-                                                                                                                                                                          <button type="submit" class="btn btn-success w-100">Guardar</button>
-                                                                                                                                                                          <button type="button" class="btn btn-secondary w-100 mt-2" @@click="$emit('cancelar')">Cancelar</button>
-                                                                                                                                                                        </form>
-                                                                                                                                                                      </div>
-                                                                                                                                                                    </div>
-                                                                                                                                                                  `,
+                                                                                                                                                                                                                <div class="card">
+                                                                                                                                                                                                                  <div class="card-body">
+                                                                                                                                                                                                                    <h5 class="card-title">{{ vacanteEditar ? 'Editar Vacante' : 'Crear Vacante' }}</h5>
+                                                                                                                                                                                                                    <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+                                                                                                                                                                                                                    <form @@submit.prevent="enviarFormulario">
+                                                                                                                                                                                                                      <div class="mb-3">
+                                                                                                                                                                                                                        <input v-model="form.titulo" class="form-control" placeholder="Título" required>
+                                                                                                                                                                                                                      </div>
+                                                                                                                                                                                                                      <div class="mb-3">
+                                                                                                                                                                                                                        <textarea v-model="form.descripcion" class="form-control" placeholder="Descripción" required></textarea>
+                                                                                                                                                                                                                      </div>
+                                                                                                                                                                                                                      <div class="mb-3">
+                                                                                                                                                                                                                        <input v-model.number="form.monto" type="number" class="form-control" placeholder="Monto" required>
+                                                                                                                                                                                                                      </div>
+                                                                                                                                                                                                                      <div class="mb-3">
+                                                                                                                                                                                                                        <input v-model="form.fechaExpiracion" type="date" class="form-control" required>
+                                                                                                                                                                                                                      </div>
+                                                                                                                                                                                                                      <button type="submit" class="btn btn-success w-100">Guardar</button>
+                                                                                                                                                                                                                      <button type="button" class="btn btn-secondary w-100 mt-2" @@click="$emit('cancelar')">Cancelar</button>
+                                                                                                                                                                                                                    </form>
+                                                                                                                                                                                                                  </div>
+                                                                                                                                                                                                                </div>
+                                                                                                                                                                                                              `,
             data() {
                 return {
                     form: {
@@ -145,6 +147,17 @@
             methods: {
                 async enviarFormulario() {
                     try {
+
+                        const hoy = new Date();
+                        hoy.setHours(0, 0, 0, 0); // Para comparar solo la fecha, sin la hora
+
+                        const fechaIngresada = new Date(this.form.fechaExpiracion);
+
+                        if (!this.form.fechaExpiracion || fechaIngresada <= hoy) {
+                            this.error = 'La fecha de expiración debe ser posterior a la fecha actual.';
+                            return;
+                        }
+
                         const url = this.vacanteEditar
                             ? `/api/vacantes/${this.vacanteEditar.id}`
                             : '/api/vacantes';
@@ -172,41 +185,44 @@
                 vacanteId: { type: Number, required: true }
             },
             template: `
-                                        <div class="card">
-                                          <div class="card-body">
-                                            <h5 class="card-title">
-                                              {{ propuestaEditar ? 'Editar Propuesta' : 'Crear Propuesta' }}
-                                            </h5>
-                                            <form @@submit.prevent="enviarFormulario">
-                                              <div class="mb-3">
-                                                <textarea
-                                                  v-model="form.mensaje"
-                                                  class="form-control"
-                                                  placeholder="Mensaje detallado"
-                                                  required
-                                                ></textarea>
-                                              </div>
-                                              <div class="mb-3">
-                                                <input
-                                                  v-model.number="form.monto"
-                                                  type="number"
-                                                  class="form-control"
-                                                  placeholder="Monto ofrecido"
-                                                  required
-                                                >
-                                              </div>
-                                              <button type="submit" class="btn btn-success w-100">Guardar</button>
-                                              <button
-                                                type="button"
-                                                class="btn btn-secondary w-100 mt-2"
-                                                @@click="$emit('cancelar')"
-                                              >
-                                                Cancelar
-                                              </button>
-                                            </form>
-                                          </div>
-                                        </div>
-                                      `,
+                                                <div class="card">
+                                                  <div class="card-body">
+                                                    <h5 class="card-title">
+                                                      {{ propuestaEditar ? 'Editar Propuesta' : 'Crear Propuesta' }}
+                                                    </h5>
+                                                       <div v-if="error" class="alert alert-danger">{{ error }}</div>
+          
+        
+                                                    <form @@submit.prevent="enviarFormulario">
+                                                      <div class="mb-3">
+                                                        <textarea
+                                                          v-model="form.mensaje"
+                                                          class="form-control"
+                                                          placeholder="Mensaje detallado"
+                                                          required
+                                                        ></textarea>
+                                                      </div>
+                                                      <div class="mb-3">
+                                                        <input
+                                                          v-model.number="form.monto"
+                                                          type="number"
+                                                          class="form-control"
+                                                          placeholder="Monto ofrecido"
+                                                          required
+                                                        >
+                                                      </div>
+                                                      <button type="submit" class="btn btn-success w-100">Guardar</button>
+                                                      <button
+                                                        type="button"
+                                                        class="btn btn-secondary w-100 mt-2"
+                                                        @@click="$emit('cancelar')"
+                                                      >
+                                                        Cancelar
+                                                      </button>
+                                                    </form>
+                                                  </div>
+                                                </div>
+                                              `,
             data() {
                 return {
                     form: {
@@ -273,8 +289,17 @@
                 const filter = ref('');
                 const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
                 esModoMisVacantes = ref(false);
-
                 const totalPages = computed(() => Math.ceil(total.value / size.value) || 1);
+                // controlar fechas
+                const controlarFecha = (fecha) => {
+                    if (!fecha) console.log('Fecha no válida:');
+                    const date = new Date(fecha);
+                    const today = new Date();
+                    if (date < today) {
+                        console.log('Fecha en el pasado:', fecha);
+                        return false;
+                    }
+                };
                 const titleMap = {
                     listAll: 'Todas las vacantes',
                     listMine: 'Mis vacantes',

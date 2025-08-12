@@ -3,28 +3,73 @@
     ViewData["Title"] = "Iniciar sesión";
 }
 
-<h2>Iniciar sesión</h2>
-
-<form asp-action="Login" method="post">
-    <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
-
-    <div class="mb-3">
-        <label asp-for="Email" class="form-label"></label>
-        <input asp-for="Email" class="form-control" />
-        <span asp-validation-for="Email" class="text-danger"></span>
+<div id="app" class="container mt-5" v-cloak>
+    <div class="card mx-auto" style="max-width: 400px;">
+        <div class="card-body">
+            <h2 class="card-title text-center">Iniciar sesión</h2>
+            <form v-on:submit.prevent="login">
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email</label>
+                    <input v-model="email" type="email" class="form-control" id="email" required />
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label">Contraseña</label>
+                    <input v-model="password" type="password" class="form-control" id="password" required />
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+                <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>
+            </form>
+        </div>
     </div>
+</div>
 
-    <div class="mb-3">
-        <label asp-for="Password" class="form-label"></label>
-        <input asp-for="Password" class="form-control" />
-        <span asp-validation-for="Password" class="text-danger"></span>
-    </div>
-
-    <button type="submit" class="btn btn-primary">Ingresar</button>
-</form>
 
 @section Scripts {
-    @{
-        await Html.RenderPartialAsync("_ValidationScriptsPartial");
-    }
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+
+        const app = Vue.createApp({
+            data() {
+                return {
+                    email: '',
+                    password: '',
+                    error: null
+                };
+            },
+            methods: {
+                async login() {
+
+                    this.error = null;
+                    try {
+                        const response = await axios.post('/api/login', {
+                            email: this.email,
+                            password: this.password
+                        });
+
+
+                        const token = response.data.token;
+                        localStorage.setItem('token', token);
+                        localStorage.setItem('usuarioId', response.data.id);
+                        localStorage.setItem('usuarioRol', response.data.rol);
+                        // También lo guarda en una cookie por 2 horas (7200 segundos)
+                        document.cookie = `jwt=${token}; path=/; max-age=7200; SameSite=Lax`;
+
+                        console.log('Token guardado:', token);
+
+
+                        window.location.href = '/';
+
+                    } catch (err) {
+                        alert('envio el fomr mal');
+                        this.error = err.response?.data || 'Error al iniciar sesión.';
+                        console.error('Error:', this.error);
+                    }
+                }
+            }
+        });
+
+        app.mount('#app');
+    </script>
 }

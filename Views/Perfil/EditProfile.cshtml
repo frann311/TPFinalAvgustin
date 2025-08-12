@@ -1,6 +1,12 @@
+@using System.Security.Claims
 @model TPFinalAvgustin.Models.PerfilViewModel
 @{
     ViewData["Title"] = "Mi Perfil";
+    string? userId = null;
+    if (User.Identity != null && User.Identity.IsAuthenticated)
+    {
+        userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
 }
 
 <h2>Mi Perfil</h2>
@@ -95,7 +101,8 @@
 
 @*boton para volver *@
 <div class="mt-4">
-    <a asp-action="Index" class="btn btn-secondary">Volver</a>
+    <a class="btn btn-secondary" asp-controller="Perfil" asp-action="Index" asp-route-id="@userId">Volver</a>
+
 </div>
 
 @section Scripts {

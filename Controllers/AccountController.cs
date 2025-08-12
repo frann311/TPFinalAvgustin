@@ -6,16 +6,22 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using TPFinalAvgustin.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 
 namespace TPFinalAvgustin.Controllers
 {
     public class AccountController : Controller
     {
         private readonly IRepositorioUsuario _repoUsuario;
+        private readonly IConfiguration _config;
 
-        public AccountController(IRepositorioUsuario repoUsuario)
+
+        public AccountController(IRepositorioUsuario repoUsuario, IConfiguration config)
         {
             _repoUsuario = repoUsuario;
+            _config = config;
         }
 
         // GET: /Account/Login
@@ -101,10 +107,56 @@ namespace TPFinalAvgustin.Controllers
             return RedirectToAction("Index", "Home");
         }
 
+        [AllowAnonymous]
+        [HttpPost("api/login")]
+        public IActionResult LoginApi([FromBody] LoginViewModel login)
+        {
+            Console.WriteLine($"API LOGIN DATOS ENVIADOS");
+            Console.WriteLine($"Email: {login.Email}");
+            var usuario = _repoUsuario.ObtenerPorEmail(login.Email);
+            if (usuario == null || !BCrypt.Net.BCrypt.Verify(login.Password, usuario.PasswordHash))
+            {
+                Console.WriteLine($"Credenciales inválidas");
+                return Unauthorized("Credenciales inválidas.");
+            }
+
+            // 1. Claims
+            var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.Name, usuario.Nombre + " " + usuario.Apellido),
+        new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+        new Claim(ClaimTypes.Role, usuario.Rol),
+        new Claim("AvatarUrl", usuario.AvatarUrl ?? "")
+    };
+            Console.WriteLine($"Claims creadas: {string.Join(", ", claims.Select(c => $"{c.Type}: {c.Value}"))}");
+
+            // 2. Crear token
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: _config["Jwt:Issuer"],
+                audience: _config["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddHours(2),
+                signingCredentials: creds
+            );
+            Console.WriteLine($"Token creado: {new JwtSecurityTokenHandler().WriteToken(token)}");
+
+            return Ok(new
+            {
+                token = new JwtSecurityTokenHandler().WriteToken(token),
+                nombre = usuario.Nombre,
+                rol = usuario.Rol,
+                id = usuario.Id
+            });
+        }
+
+
 
         // GET: /Account/Signin
         [HttpGet]
-        [AllowAnonymous] // Permite acceso sin estar autenticado
+        [AllowAnonymous]
         public IActionResult Signin()
         {
 
@@ -171,6 +223,71 @@ namespace TPFinalAvgustin.Controllers
             return RedirectToAction("Index", "Home");
         }
 
+        [AllowAnonymous]
+        [HttpPost("api/signin")]
+        public IActionResult SigninApi([FromBody] SigninViewModel signin)
+        {
+            Console.WriteLine($"SIGNIN DATOS ENVIADOS");
+            Console.WriteLine($"Email: {signin.Email}");
+
+            var usuarioExistente = _repoUsuario.ObtenerPorEmail(signin.Email);
+            if (usuarioExistente != null)
+            {
+                return Unauthorized("El usuario ingresado ya existe.");
+            }
+
+            if (signin.Password != signin.ConfirmPassword)
+            {
+                return Unauthorized("Las contraseñas ingresadas no coinciden.");
+            }
+
+            signin.PasswordHash = BCrypt.Net.BCrypt.HashPassword(signin.Password);
+            var usuario = new Usuario
+            {
+                Email = signin.Email,
+                Nombre = signin.Nombre,
+                Apellido = signin.Apellido,
+                PasswordHash = signin.PasswordHash,
+                Rol = "Common", // Rol por defecto
+                Creado_En = DateTime.Now
+            };
+
+            int nuevoId = _repoUsuario.Alta(usuario);
+            usuario.Id = nuevoId;
+
+            // 🔐 Generar el JWT
+            var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.Name, usuario.Nombre + " " + usuario.Apellido),
+        new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+        new Claim(ClaimTypes.Role, usuario.Rol),
+        new Claim("AvatarUrl", usuario.AvatarUrl ?? "")
+    };
+
+            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var expires = DateTime.Now.AddHours(2);
+
+            var token = new JwtSecurityToken(
+                issuer: _config["Jwt:Issuer"],
+                audience: _config["Jwt:Audience"],
+                claims: claims,
+                expires: expires,
+                signingCredentials: creds
+            );
+
+            var tokenString = new JwtSecurityTokenHandler().WriteToken(token);
+
+            // Enviar el token al cliente
+            return Ok(new
+            {
+                token = tokenString,
+                id = usuario.Id,
+                rol = usuario.Rol
+            });
+        }
+
+
 
 
 
@@ -193,8 +310,8 @@ namespace TPFinalAvgustin.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()
         {
-            // Elimina la cookie de autenticación
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+            Response.Cookies.Delete("jwt");
             return RedirectToAction("Login", "Account");
         }
     }

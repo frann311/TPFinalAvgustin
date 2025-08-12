@@ -49,9 +49,15 @@ namespace TPFinalAvgustin.Controllers.Api
                 query = query.Where(v => v.UsuarioId != id);
             }
             Console.WriteLine("ID DEL USUARIO ENVIADO EN PETICION: " + usuarioId);
+            if (usuarioId == null)
+            {
+                query = query.Where(v => v.FechaExpiracion >= DateTime.Today);
+            }
+
 
             var total = await query.CountAsync();
             var items = await query
+                .Where(v => v.IsAbierta)  //  Vacantes abiertas
                 .OrderBy(v => v.Id)
                 .Skip((page - 1) * size)
                 .Take(size)
@@ -84,6 +90,12 @@ namespace TPFinalAvgustin.Controllers.Api
         public async Task<ActionResult<Vacante>> CreateVacante(
             [FromBody] Vacante vacante)  // 3. Model binding: deserializa el JSON del body a este parámetro
         {
+            if (!ModelState.IsValid)  // 4. Valida el modelo
+                return BadRequest(ModelState);  // 5. Devuelve 400 Bad Request si hay errores
+            if (vacante.FechaExpiracion < DateTime.Now)
+                return BadRequest("La fecha de expiración no puede ser en el pasado");
+
+
             // 4. Marca la entidad como "nueva" en el contexto EF Core
             _context.Vacantes.Add(vacante);
 
@@ -98,8 +110,15 @@ namespace TPFinalAvgustin.Controllers.Api
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateVacante(int id, [FromBody] Vacante dto)
         {
+
             var v = await _context.Vacantes.FindAsync(id);
             if (v == null) return NotFound();
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (dto.FechaExpiracion < DateTime.Now)
+                return BadRequest("La fecha de expiración no puede ser en el pasado");
+            if (!dto.IsAbierta)
+                return BadRequest("La vacante debe estar abierta para ser modificada");
+
             v.Titulo = dto.Titulo;
             v.Descripcion = dto.Descripcion;
             v.Monto = dto.Monto;
@@ -114,6 +133,8 @@ namespace TPFinalAvgustin.Controllers.Api
         {
             var v = await _context.Vacantes.FindAsync(id);
             if (v == null) return NotFound();
+            if (!v.IsAbierta)
+                return BadRequest("La vacante debe estar abierta para ser eliminada");
             _context.Vacantes.Remove(v);
             await _context.SaveChangesAsync();
             return NoContent();

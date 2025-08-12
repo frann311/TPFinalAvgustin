@@ -46,3 +46,8 @@ button.accept-policy {
   white-space: nowrap;
   line-height: 60px;
 }
+.texto-seleccionado {
+  color: #fdb10d !important;
+  font-weight: 600 !important;
+  text-decoration: underline !important;
+}

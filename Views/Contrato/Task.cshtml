@@ -1,0 +1,220 @@
+<div id="task-app" class="container-fluid py-4" style="background-color: #f8f9fc;">
+    <div class="row justify-content-center">
+
+        <!-- Columna lista de contratos -->
+        <div class="col-md-4">
+            <h3 class="mb-4 text-primary fw-bold text-center">Tareas Activas</h3>
+
+            <div v-if="items.length === 0" class="alert alert-info">
+                No se encontraron Tareas a realizar.
+            </div>
+
+            <!-- Card de contrato -->
+            <div v-for="t in items" :key="t.id" class="card mb-3 shadow-sm contrato-item" @@click="selectTask(t.id)"
+                data-bs-toggle="tooltip" :title="'Ver detalles de ' + t.vacanteTitulo">
+                <div class="card-body">
+                    <h5 class="card-title mb-2">{{ t.vacanteTitulo }}</h5>
+                    <p class="mb-1"><strong>Fecha inicio:</strong> {{ formatDate(t.fechaCreacion) }}</p>
+                    <p class="mb-1"><strong>Estado:</strong> <span class="badge bg-success">Activo</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna detalle del contrato -->
+        <div class="col-md-6" v-if="selected">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Contrato #{{ selected.id }}</h5>
+                </div>
+                <div class="card-body">
+
+                    <!-- Info contrato -->
+                    <h6 class="text-secondary mb-3">Información del Contrato</h6>
+                    <ul class="list-unstyled small">
+                        <li><strong>Proyecto:</strong> {{ selected.vacanteTitulo }}</li>
+                        <li><strong>Objetivo:</strong> {{ selected.vacanteDescripcion }}</li>
+                        <li><strong>Fecha inicio:</strong> {{ formatDate(selected.fechaCreacion) }}</li>
+                        <li><strong>Fecha Limite:</strong> {{ selected.fechaLimite ?
+                            formatDate(selected.fechaFinalizacion) : 'No definida' }}</li>
+                        <li><strong>Estado:</strong> Activo</li>
+                    </ul>
+
+                    <hr>
+
+
+
+
+
+                    <!-- Subida de archivos -->
+                    <h6 class="text-secondary mb-3">Subir Archivos</h6>
+                    <div class="border p-3 rounded bg-light text-center">
+                        <div v-if="error" class="alert alert-danger">{{ error }}</div>
+                        <input type="file" class="form-control mb-2" multiple @@change="onFileChange" />
+                        <button class="btn btn-primary mt-2" @@click="subirArchivos">Subir</button>
+                        <small class="text-muted"> Formatos permitidos: PDF, DOCX, JPG, PNG</small>
+                    </div>
+                    <button class="btn btn-link mb-3" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#archivosCollapse" aria-expanded="false" aria-controls="archivosCollapse">
+                        Archivos del Contrato ({{ archivosItem.length }})
+                    </button>
+
+                    <!-- Contenedor collapsible -->
+                    <div class="collapse" id="archivosCollapse">
+                        <ul class="list-group">
+                            <li v-for="archivo in archivosItem" :key="archivo.id"
+                                class="list-group-item d-flex justify-content-between align-items-center">
+                                <a :href="archivo.url" target="_blank" rel="noopener noreferrer"
+                                    class="text-decoration-none">
+                                    {{ archivo.nombre_original }}
+                                </a>
+                                <span @@click="deleteArchivo(archivo.id)" class="badge bg-danger">X</span>
+                            </li>
+                        </ul>
+                    </div>
+
+
+                </div>
+                <div class="card-footer text-end">
+                    <button @@click="CloseTask()" class="btn btn-secondary">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .contrato-item {
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .contrato-item:hover {
+        transform: scale(1.02);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+    }
+</style>
+
+@section Scripts {
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        const { createApp, ref } = Vue;
+
+        createApp({
+            setup() {
+                const items = ref([]);
+                const archivosItem = ref({});
+                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+                const loading = ref(false);
+                const error = ref(null);
+                const selected = ref(null);
+                const total = ref(0);
+                const archivosSeleccionados = ref([])
+
+                function formatDate(fecha) {
+                    return new Date(fecha).toLocaleDateString();
+                }
+
+                async function selectTask(id) {
+                    try {
+                        loading.value = true;
+                        const response = await axios.get(`/api/contratos/taskById/${id}`);
+                        selected.value = response.data;
+                        console.log("Tarea seleccionada:", selected.value);
+
+                        try {
+                            const archivos = await axios.get(`/api/archivos/${id}`)
+                            archivosItem.value = archivos.data
+                            console.log("Archivos de la tarea:", archivosItem.value)
+                        } catch (error) {
+                            console.error("Error al cargar archivos de la tarea:", error)
+                        }
+
+
+                    } catch (error) {
+                        console.error("Error al seleccionar tarea:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+                }
+
+                const CloseTask = () => {
+                    selected.value = null;
+                    archivosItem.value = [];
+                }
+
+                async function loadTasks() {
+                    try {
+                        loading.value = true;
+                        const response = await axios.get(`/api/contratos/tasks/${userId.value}`);
+                        items.value = response.data.items; // <-- CORREGIDO
+                        total.value = response.data.total;
+                    } catch (error) {
+                        console.error("Error al cargar tareas:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+                }
+
+                // Manejo de selección de archivos
+                function onFileChange(event) {
+                    archivosSeleccionados.value = event.target.files
+                }
+
+                async function subirArchivos() {
+                    if (!archivosSeleccionados.value.length) {
+                        error.value = 'Seleccione al menos un archivo';
+                        return
+                    }
+
+                    const formData = new FormData()
+                    console.log("id de contrato seleccionado:", selected.value.id)
+                    for (let file of archivosSeleccionados.value) {
+                        formData.append('archivos', file)
+                    }
+                    formData.append('contratoId', selected.value.id)
+
+                    try {
+                        const response = await axios.post('/api/archivos/upload', formData)
+
+                        if (response.status === 200) {
+
+                            archivosSeleccionados.value = [] // Limpiar selección
+                            const id = selected.value.id
+                            selected.value = null // Limpiar la tarea seleccionada
+                            selectTask(id) // Recargar la tarea para ver los archivos subidos
+
+
+                        } else {
+                            alert('Error al subir archivos')
+                        }
+                    } catch (error) {
+                        console.error(error)
+                        alert('Error en la conexión')
+                    }
+                }
+
+                deleteArchivo = async (archivoId) => {
+
+
+                    try {
+                        loading.value = true;
+                        await axios.delete(`/api/archivos/${archivoId}`);
+                        archivosItem.value = archivosItem.value.filter(a => a.id !== archivoId);
+                        console.log("Archivo eliminado:", archivoId);
+                    } catch (error) {
+                        console.error("Error al eliminar archivo:", error);
+                    } finally {
+                        loading.value = false;
+                    }
+                }
+
+
+                loadTasks();
+
+                return { items, userId, loading, selected, total, formatDate, selectTask, onFileChange, subirArchivos, archivosItem, deleteArchivo, error, CloseTask };
+            }
+        }).mount('#task-app');
+    </script>
+}

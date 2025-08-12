@@ -1,0 +1,190 @@
+@using System.Security.Claims@{
+    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.jpg";
+}
+
+
+<div class="container mt-4" id="pagos-app">
+    <div class="row">
+        <!-- Columna izquierda: menú lateral con filtros -->
+        <div class="col-md-3">
+            <div class="card mb-3">
+                <div class="card-body text-center">
+                    <img src="@avatarUrl" class="rounded-circle mb-2"
+                        style="width:100px; height:100px; object-fit:cover;" alt="Avatar" />
+                    <h5 class="card-title">@User.Identity.Name</h5>
+                </div>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item" :class="{ 'texto-seleccionado': filtros.estado === 'retenido' }">
+                        <a href="#" @@click.prevent="filtros.estado = 'retenido'">Pagos retenidos</a>
+                    </li>
+                    <li class="list-group-item" :class="{ 'texto-seleccionado': filtros.estado === 'liberado' }">
+                        <a href="#" @@click.prevent="filtros.estado = 'liberado'">Pagos liberados</a>
+                    </li>
+                    <li class="list-group-item" :class="{ 'texto-seleccionado': filtros.estado === 'cancelado' }">
+                        <a href="#" @@click.prevent="filtros.estado = 'cancelado'">Pagos cancelados</a>
+                    </li>
+
+
+                    <li class="list-group-item">
+                        <label for="fechaDesde">Desde</label>
+
+                        <input type="date" id="fechaDesde" v-model="filtros.fechaDesde" class="form-control my-2"
+                            placeholder="Desde" />
+                        <label for="fechaHasta">Hasta</label>
+                        <input type="date" id="fechaHasta" v-model="filtros.fechaHasta" class="form-control"
+                            placeholder="Hasta" />
+                        <button class="btn btn-sm btn-outline-primary mt-2" @@click="loadPagos()">Filtrar</button>
+                        <button class="btn btn-sm btn-outline-primary mt-2" @@click="resetFiltros()">Quitar
+                            filtros</button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Columna derecha: lista de pagos -->
+        <div class="col-md-9">
+            <h3 class="mb-3">Historial de Pagos Recibidos</h3>
+
+            <div v-if="items.length === 0" class="alert alert-info">
+                No se encontraron pagos con los filtros aplicados.
+            </div>
+
+            <div v-for="pago in items" :key="pago.id" class="card mb-2 shadow-sm" style="cursor:pointer;">
+                <div class="card-body d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title mb-1">Monto: ${{ pago.monto.toFixed(2) }}</h5>
+                        <p class="card-text mb-0">
+                            Estado:
+                            <span v-if="pago.estado === 'liberado'" class="badge bg-success">Liberado</span>
+                            <span v-else-if="pago.estado === 'retenido'"
+                                class="badge bg-warning text-dark">Retenido</span>
+                            <span v-else-if="pago.estado === 'cancelado'" class="badge bg-danger">Cancelado</span>
+                            <span v-else class="badge bg-secondary">Desconocido</span>
+                        </p>
+                        <small class="text-muted">Creado: {{ formatDate(pago.fechaCreacion) }}</small>
+                    </div>
+                    <i class="bi bi-chevron-right"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de detalle de pago -->
+
+</div>
+@section Scripts {
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const { createApp, ref, computed, watch, reactive } = Vue;
+        createApp({
+            setup() {
+                const items = ref([]);
+                const selected = ref(null);
+                const page = ref(1);
+                const size = ref(5);
+                const total = ref(0);
+                const loading = ref(false);
+                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+                const viewState = ref('Pagos');
+                const totalPages = computed(() => Math.ceil(total.value / size.value) || 1);
+                const formatDate = iso => iso ? new Date(iso).toLocaleDateString('es-AR') : '';
+                const title = computed(() => {
+                    if (viewState.value === 'Pagos') return 'historial de pagos';
+                    return '';
+                });
+                const filtros = reactive({
+                    estado: null,
+                    fechaDesde: null,
+                    fechaHasta: null
+                });
+
+
+                function switchView(mode) {
+                    // si entras a una lista, actualizas lastList
+                    selected.value = null; // resetea la propuesta seleccionada
+                    if (mode === 'Pagos') {
+                        viewState.value = mode;
+                        loadPropuestas();
+                    } else if (mode === 'otra cosa') {
+                        viewState.value = mode;
+                        items.value = [];
+                    }
+                }
+
+                const loadPagos = async () => {
+                    try {
+                        loading.value = true;
+
+                        const params = {
+                            page: page.value,
+                            size: size.value,
+                            usuarioId: userId.value
+                        };
+
+                        // Solo agregás si tienen valor
+                        if (filtros.estado) params.estado = filtros.estado;
+                        if (filtros.fechaDesde) params.fechaDesde = filtros.fechaDesde;
+                        if (filtros.fechaHasta) params.fechaHasta = filtros.fechaHasta;
+                        console.log("Cargando pagos con filtros:", params);
+
+                        const { data } = await axios.get('/api/pagos/get-pagos', { params });
+
+                        items.value = data.items ?? [];
+                        total.value = data.total ?? 0;
+                        console.log("Pagos cargados:", items.value);
+                    } catch (err) {
+                        console.error("Error al cargar pagos:", err);
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+
+
+                const seleccionarPago = async (pago) => {
+                    // al seleccionar una vacante, se cargan las propuestas de esa vacante
+                    selected.value = null; // resetea la propuesta seleccionada
+                    items.value = []; // limpia las propuestas actuales
+                    const { data } = await axios.get(`/api/pagos/${pago.id}`);
+                    selected.value = data;
+                }
+                const resetFiltros = () => {
+                    filtros.estado = null;
+                    filtros.fechaDesde = null;
+                    filtros.fechaHasta = null;
+                    loadPagos();
+                };
+
+                function changePage(n) {
+                    if (n < 1 || n > totalPages.value) return;
+                    page.value = n;
+                    loadPropuestas();
+                }
+
+                loadPagos();
+
+                return {
+                    items,
+                    selected,
+                    page,
+                    size,
+                    total,
+                    changePage,
+                    loading,
+                    userId,
+                    viewState,
+                    totalPages,
+                    formatDate,
+                    title,
+                    switchView,
+                    loadPagos,
+                    seleccionarPago,
+                    filtros,
+                    resetFiltros
+                };
+            }
+        }).mount('#pagos-app');
+
+    </script>
+}

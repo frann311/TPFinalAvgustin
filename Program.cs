@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Authorization;  // Asegúrate de tener el namespace correcto
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Routing;
-
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,21 +35,67 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         )
     ));
 
-
 // 1.2. Configuramos la autenticación por cookies
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
+builder.Services.AddAuthentication(options =>
+{
+    // {
+    //     // 1.2.1. Ruta a la que redirige cuando no está autenticado
+    //     options.LoginPath = "/Account/Login";
+    //     // 1.2.2. Ruta para el logout (opcional)
+    //     options.LogoutPath = "/Account/Logout";
+    //     // 1.2.3. Tiempo de vida de la cookie, etc. se pueden ajustar aquí
+
+
+    //     options.ExpireTimeSpan = TimeSpan.FromMinutes(20);
+    //     options.SlidingExpiration = false;
+    // })
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.Events = new JwtBearerEvents
     {
-        // 1.2.1. Ruta a la que redirige cuando no está autenticado
-        options.LoginPath = "/Account/Login";
-        // 1.2.2. Ruta para el logout (opcional)
-        options.LogoutPath = "/Account/Logout";
-        // 1.2.3. Tiempo de vida de la cookie, etc. se pueden ajustar aquí
+        OnMessageReceived = context =>
+        {
+            // Buscar el token desde la cookie "jwt"
+            var token = context.Request.Cookies["jwt"];
+            if (!string.IsNullOrEmpty(token))
+            {
+                context.Token = token;
+            }
+            return Task.CompletedTask;
+        }
+    };
+    var secretKey = builder.Configuration["Jwt:Key"]; // debe estar en appsettings.json
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey!))
+    };
+});
+//     .AddJwtBearer(options =>
+// {
+//     var secretKey = builder.Configuration["Jwt:Key"]; // debe estar en appsettings.json
+//     options.TokenValidationParameters = new TokenValidationParameters
+//     {
+//         ValidateIssuer = true,
+//         ValidateAudience = true,
+//         ValidateLifetime = true,
+//         ValidateIssuerSigningKey = true,
+//         ValidIssuer = builder.Configuration["Jwt:Issuer"],
+//         ValidAudience = builder.Configuration["Jwt:Audience"],
+//         IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secretKey!)),
+//     };
+// });
 
 
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(20);
-        options.SlidingExpiration = false;
-    });
+
 
 // 1.3. (Opcional) Configuramos la autorización por roles o policies
 builder.Services.AddAuthorization(options =>
@@ -80,7 +128,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseDeveloperExceptionPage();
 // ←–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 // Este middleware habilita servir archivos estáticos desde wwwroot,
 // incluidas las imágenes subidas bajo wwwroot/Uploads/…
@@ -91,6 +139,8 @@ app.UseStaticFiles();
 //     Console.WriteLine($"[Request] {context.Request.Method} {context.Request.Path}");
 //     await next();
 // });
+app.UseMiddleware<JwtRedirectMiddleware>();
+
 app.UseRouting();
 if (app.Environment.IsDevelopment())
 {
