@@ -24,7 +24,7 @@ namespace TPFinalAvgustin.Controllers
             _config = config;
         }
 
-        // GET: /Account/Login
+        // /Account/Login
         [HttpGet]
         [AllowAnonymous] // Permite acceso sin estar autenticado
         public IActionResult Login(string returnUrl = null)
@@ -33,7 +33,7 @@ namespace TPFinalAvgustin.Controllers
             return View();
         }
 
-        // POST: /Account/Login
+        // LOGIN DEPRECATED
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AllowAnonymous]
@@ -122,12 +122,12 @@ namespace TPFinalAvgustin.Controllers
 
             // 1. Claims
             var claims = new List<Claim>
-    {
-        new Claim(ClaimTypes.Name, usuario.Nombre + " " + usuario.Apellido),
-        new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
-        new Claim(ClaimTypes.Role, usuario.Rol),
-        new Claim("AvatarUrl", usuario.AvatarUrl ?? "")
-    };
+            {
+                new Claim(ClaimTypes.Name, usuario.Nombre + " " + usuario.Apellido),
+                new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString()),
+                new Claim(ClaimTypes.Role, usuario.Rol),
+                new Claim("AvatarUrl", usuario.AvatarUrl ?? "")
+            };
             Console.WriteLine($"Claims creadas: {string.Join(", ", claims.Select(c => $"{c.Type}: {c.Value}"))}");
 
             // 2. Crear token
@@ -154,7 +154,7 @@ namespace TPFinalAvgustin.Controllers
 
 
 
-        // GET: /Account/Signin
+        // /Account/Signin
         [HttpGet]
         [AllowAnonymous]
         public IActionResult Signin()
@@ -163,14 +163,14 @@ namespace TPFinalAvgustin.Controllers
             return View();
         }
 
-        // POST: /Account/Login
+        // SIGNIN DEPRECATED
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AllowAnonymous]
         public async Task<IActionResult> Signin(SigninViewModel vm)
         {
 
-            // datos recibidos en el formulario
+
             Console.WriteLine($"SIGNIN DATOS ENVIADOS");
             Console.WriteLine($"Email: {vm.Email}");
             Console.WriteLine($"Password: {vm.Password}");
@@ -255,7 +255,7 @@ namespace TPFinalAvgustin.Controllers
             int nuevoId = _repoUsuario.Alta(usuario);
             usuario.Id = nuevoId;
 
-            // 🔐 Generar el JWT
+            // Generar el JWT
             var claims = new List<Claim>
     {
         new Claim(ClaimTypes.Name, usuario.Nombre + " " + usuario.Apellido),
@@ -305,7 +305,7 @@ namespace TPFinalAvgustin.Controllers
 
 
 
-        // POST: /Account/Logout
+        // /Account/Logout
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()

@@ -1,22 +1,53 @@
-<div id="task-app" class="container-fluid py-4" style="background-color: #f8f9fc;">
+<div id="task-app" v-cloak class="container-fluid py-4" style="background-color: #f8f9fc;">
     <div class="row justify-content-center">
 
         <!-- Columna lista de contratos -->
         <div class="col-md-4">
-            <h3 class="mb-4 text-primary fw-bold text-center">Tareas Activas</h3>
-
+            <h3 class="mb-4 text-primary fw-bold text-center">{{titulo}}</h3>
+            <div>
+                <button class="btn btn-primary me-2" @@click="switchView('tareasActivas')">Tareas Activas
+                    <button class="btn btn-outline-secondary" @@click="switchView('tareasHistorial')">Tareas
+                        Canceladas</button>
+            </div>
             <div v-if="items.length === 0" class="alert alert-info">
-                No se encontraron Tareas a realizar.
+                {{messageNoItems}}
             </div>
 
             <!-- Card de contrato -->
-            <div v-for="t in items" :key="t.id" class="card mb-3 shadow-sm contrato-item" @@click="selectTask(t.id)"
-                data-bs-toggle="tooltip" :title="'Ver detalles de ' + t.vacanteTitulo">
-                <div class="card-body">
+            <div v-for="t in items" :key="t.id" class="card mb-3 shadow-sm contrato-item" data-bs-toggle="tooltip"
+                :title="'Ver detalles de ' + t.vacanteTitulo">
+                <div class="card-body" :class="{ 'disabled': !t.isActive }"
+                    @@click="t.isActive ? selectTask(t.id) : null">
                     <h5 class="card-title mb-2">{{ t.vacanteTitulo }}</h5>
                     <p class="mb-1"><strong>Fecha inicio:</strong> {{ formatDate(t.fechaCreacion) }}</p>
-                    <p class="mb-1"><strong>Estado:</strong> <span class="badge bg-success">Activo</span></p>
+
+                    <p v-if="t.isActive" class="mb-1">
+                        <strong>Estado:</strong>
+                        <span class="badge bg-success">Activo</span>
+                    </p>
+                    <p v-else-if="t.isCancelled" class="mb-1">
+                        <strong>Estado:</strong>
+                        <span class="badge bg-danger">Cancelado</span>
+                    </p>
+
+                    <!-- Botón para solicitar revisión -->
+                    <button v-if="t.estado_disputa == 'Ninguna'" class="btn btn-warning btn-sm mt-2"
+                        @@click="solicitarRevision(t.id)">
+                        Solicitar revisión
+                    </button>
+
+                    <span v-if="t.estado_disputa == 'EnRevision'" class="badge bg-warning text-dark">
+                        Solicitud de revisión enviada
+                    </span>
+                    <span v-if="t.estado_disputa == 'Rechazada'" class="badge bg-danger text-dark">
+                        Solicitud de revisión Rechazada
+                    </span>
+                    <span v-if="t.estado_disputa == 'Aprobada'" class="badge bg-success text-dark">
+                        Solicitud de revisión Aprobada
+                    </span>
+
                 </div>
+
             </div>
         </div>
 
@@ -24,7 +55,7 @@
         <div class="col-md-6" v-if="selected">
             <div class="card shadow-lg">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">Contrato #{{ selected.id }}</h5>
+                    <h5 class="mb-0">Contrato</h5>
                 </div>
                 <div class="card-body">
 
@@ -103,117 +134,251 @@
 
         createApp({
             setup() {
+
+                // ======================================================
+                // ESTADO PRINCIPAL
+                // ======================================================
                 const items = ref([]);
-                const archivosItem = ref({});
-                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+                const selected = ref(null);
+                const archivosItem = ref([]);
+
+                const archivosSeleccionados = ref([]);
                 const loading = ref(false);
                 const error = ref(null);
-                const selected = ref(null);
                 const total = ref(0);
-                const archivosSeleccionados = ref([])
 
-                function formatDate(fecha) {
-                    return new Date(fecha).toLocaleDateString();
-                }
+                const titulo = ref("Tareas Activas");
+                const messageNoItems = ref("No se encontraron Tareas a realizar.");
 
-                async function selectTask(id) {
+                // ======================================================
+                // HELPERS
+                // ======================================================
+                const formatDate = (fecha) =>
+                    new Date(fecha).toLocaleDateString();
+
+
+                // ======================================================
+                // API: OBTENCIÓN DE TAREAS
+                // ======================================================
+                const loadTasks = async () => {
                     try {
                         loading.value = true;
-                        const response = await axios.get(`/api/contratos/taskById/${id}`);
-                        selected.value = response.data;
+
+                        const { data } = await axios.get(`/api/contratos/tasks`);
+                        items.value = data.items;
+                        total.value = data.total;
+
+                        console.log("Tareas cargadas:", items.value);
+
+                    } catch (err) {
+                        console.error("Error al cargar tareas:", err);
+
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const loadHistoricalTasks = async () => {
+                    try {
+                        loading.value = true;
+
+                        const { data } = await axios.get(`/api/contratos/tasks/historial`);
+                        items.value = data.items;
+                        total.value = data.total;
+
+                        console.log("Historial cargado:", items.value);
+
+                    } catch (err) {
+                        console.error("Error al cargar historial de tareas:", err);
+
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+
+                // ======================================================
+                // SELECCIONAR TAREA + ARCHIVOS
+                // ======================================================
+                const selectTask = async (id) => {
+                    try {
+                        loading.value = true;
+
+                        const { data } = await axios.get(`/api/contratos/taskById/${id}`);
+                        selected.value = data;
+
                         console.log("Tarea seleccionada:", selected.value);
 
+                        // Archivos asociados
                         try {
-                            const archivos = await axios.get(`/api/archivos/${id}`)
-                            archivosItem.value = archivos.data
-                            console.log("Archivos de la tarea:", archivosItem.value)
-                        } catch (error) {
-                            console.error("Error al cargar archivos de la tarea:", error)
+                            const archivos = await axios.get(`/api/archivos/${id}`);
+                            archivosItem.value = archivos.data;
+
+                            console.log("Archivos de la tarea:", archivosItem.value);
+
+                        } catch (err) {
+                            console.error("Error al cargar archivos:", err);
                         }
 
+                    } catch (err) {
+                        console.error("Error al seleccionar tarea:", err);
 
-                    } catch (error) {
-                        console.error("Error al seleccionar tarea:", error);
                     } finally {
                         loading.value = false;
                     }
-                }
+                };
 
-                const CloseTask = () => {
+
+                // ======================================================
+                // CAMBIAR ENTRE VISTAS (activas / historial)
+                // ======================================================
+                const switchView = (view) => {
+
                     selected.value = null;
-                    archivosItem.value = [];
-                }
+                    items.value = [];
+                    total.value = 0;
 
-                async function loadTasks() {
-                    try {
-                        loading.value = true;
-                        const response = await axios.get(`/api/contratos/tasks/${userId.value}`);
-                        items.value = response.data.items; // <-- CORREGIDO
-                        total.value = response.data.total;
-                    } catch (error) {
-                        console.error("Error al cargar tareas:", error);
-                    } finally {
-                        loading.value = false;
+                    if (view === 'tareasActivas') {
+                        console.log("Vista: Tareas Activas");
+
+                        titulo.value = "Tareas Activas";
+                        messageNoItems.value = "No se encontraron Tareas Activas.";
+                        loadTasks();
+
+                    } else if (view === 'tareasHistorial') {
+                        console.log("Vista: Tareas Canceladas");
+
+                        titulo.value = "Tareas Canceladas";
+                        messageNoItems.value = "No se encontraron Tareas Canceladas.";
+                        loadHistoricalTasks();
                     }
-                }
+                };
 
-                // Manejo de selección de archivos
-                function onFileChange(event) {
-                    archivosSeleccionados.value = event.target.files
-                }
 
-                async function subirArchivos() {
+                // ======================================================
+                // ARCHIVOS
+                // ======================================================
+                const onFileChange = (evt) => {
+                    archivosSeleccionados.value = evt.target.files;
+                };
+
+                const subirArchivos = async () => {
+
                     if (!archivosSeleccionados.value.length) {
-                        error.value = 'Seleccione al menos un archivo';
-                        return
+                        error.value = "Seleccione al menos un archivo.";
+                        return;
                     }
 
-                    const formData = new FormData()
-                    console.log("id de contrato seleccionado:", selected.value.id)
-                    for (let file of archivosSeleccionados.value) {
-                        formData.append('archivos', file)
+                    const formData = new FormData();
+                    const taskId = selected.value.id;
+
+                    for (const file of archivosSeleccionados.value) {
+                        formData.append("archivos", file);
                     }
-                    formData.append('contratoId', selected.value.id)
+
+                    formData.append("contratoId", taskId);
 
                     try {
-                        const response = await axios.post('/api/archivos/upload', formData)
+                        const response = await axios.post('/api/archivos/upload', formData);
 
                         if (response.status === 200) {
 
-                            archivosSeleccionados.value = [] // Limpiar selección
-                            const id = selected.value.id
-                            selected.value = null // Limpiar la tarea seleccionada
-                            selectTask(id) // Recargar la tarea para ver los archivos subidos
+                            archivosSeleccionados.value = [];
+                            selected.value = null;
 
+                            // Recargar para ver archivos nuevos
+                            selectTask(taskId);
 
                         } else {
-                            alert('Error al subir archivos')
+                            alert("Error al subir archivos.");
                         }
-                    } catch (error) {
-                        console.error(error)
-                        alert('Error en la conexión')
+
+                    } catch (err) {
+                        console.error(err);
+                        alert("Error en la conexión.");
                     }
-                }
+                };
 
-                deleteArchivo = async (archivoId) => {
-
-
+                const deleteArchivo = async (archivoId) => {
                     try {
                         loading.value = true;
+
                         await axios.delete(`/api/archivos/${archivoId}`);
                         archivosItem.value = archivosItem.value.filter(a => a.id !== archivoId);
+
                         console.log("Archivo eliminado:", archivoId);
-                    } catch (error) {
-                        console.error("Error al eliminar archivo:", error);
+
+                    } catch (err) {
+                        console.error("Error al eliminar archivo:", err);
+
                     } finally {
                         loading.value = false;
                     }
-                }
+                };
 
 
+                // ======================================================
+                // SOLICITAR REVISIÓN DE UNA TAREA
+                // ======================================================
+                const solicitarRevision = async (taskId) => {
+                    try {
+                        loading.value = true;
+
+                        await axios.put(`/api/contratos/solicitar-revision/${taskId}`);
+
+                        // Al solicitar revisión → pasa al historial
+                        loadHistoricalTasks();
+
+                    } catch (err) {
+                        console.error("Error al solicitar revisión:", err);
+                        alert("Error al enviar solicitud de revisión.");
+
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+
+                // ======================================================
+                // UTILIDADES
+                // ======================================================
+                const CloseTask = () => {
+                    selected.value = null;
+                    archivosItem.value = [];
+                };
+
+
+                // ======================================================
+                // CARGA INICIAL
+                // ======================================================
                 loadTasks();
 
-                return { items, userId, loading, selected, total, formatDate, selectTask, onFileChange, subirArchivos, archivosItem, deleteArchivo, error, CloseTask };
+
+                // ======================================================
+                // RETORNO
+                // ======================================================
+                return {
+                    items,
+                    selected,
+                    archivosItem,
+                    archivosSeleccionados,
+
+                    titulo,
+                    messageNoItems,
+                    loading,
+                    error,
+                    total,
+
+                    // funciones
+                    switchView,
+                    selectTask,
+                    CloseTask,
+                    onFileChange,
+                    subirArchivos,
+                    deleteArchivo,
+                    solicitarRevision,
+                    formatDate,
+                };
             }
         }).mount('#task-app');
     </script>

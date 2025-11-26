@@ -1,11 +1,15 @@
 ﻿@using System.Security.Claims
 @{
-    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.jpg";
+    var claimAvatar = User.FindFirstValue("AvatarUrl");
+    var avatarUrl = !string.IsNullOrEmpty(claimAvatar)
+    ? claimAvatar
+    : Url.Content("~/img/default-avatar.jpg");
+
     var VacantesCreadasCount = ViewBag.VacantesCreadasCount ?? 0;
     var PropuestasEnviadasCount = ViewBag.PropuestasEnviadasCount ?? 0;
 }
 
-<div class="container mt-4" id="vacantes-app">
+<div class="container mt-4 " v-cloak id="vacantes-app">
     <div class="row">
         <!-- Columna izquierda -->
         <div class="col-md-3">
@@ -99,47 +103,63 @@
 </div>
 
 @section Scripts {
+
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
     <script>
         const { createApp, ref, computed, watch } = Vue;
 
+        /* ============================================================
+           COMPONENTE: VacanteForm
+        ============================================================ */
         const VacanteForm = {
-            props: {
-                vacanteEditar: { type: Object, default: null }
-            },
+            props: { vacanteEditar: { type: Object, default: null } },
             template: `
-                                                                                                                                                                                                                <div class="card">
-                                                                                                                                                                                                                  <div class="card-body">
-                                                                                                                                                                                                                    <h5 class="card-title">{{ vacanteEditar ? 'Editar Vacante' : 'Crear Vacante' }}</h5>
-                                                                                                                                                                                                                    <div v-if="error" class="alert alert-danger">{{ error }}</div>
+                        <div class="card">
+                            <div class="card-body">
 
-                                                                                                                                                                                                                    <form @@submit.prevent="enviarFormulario">
-                                                                                                                                                                                                                      <div class="mb-3">
-                                                                                                                                                                                                                        <input v-model="form.titulo" class="form-control" placeholder="Título" required>
-                                                                                                                                                                                                                      </div>
-                                                                                                                                                                                                                      <div class="mb-3">
-                                                                                                                                                                                                                        <textarea v-model="form.descripcion" class="form-control" placeholder="Descripción" required></textarea>
-                                                                                                                                                                                                                      </div>
-                                                                                                                                                                                                                      <div class="mb-3">
-                                                                                                                                                                                                                        <input v-model.number="form.monto" type="number" class="form-control" placeholder="Monto" required>
-                                                                                                                                                                                                                      </div>
-                                                                                                                                                                                                                      <div class="mb-3">
-                                                                                                                                                                                                                        <input v-model="form.fechaExpiracion" type="date" class="form-control" required>
-                                                                                                                                                                                                                      </div>
-                                                                                                                                                                                                                      <button type="submit" class="btn btn-success w-100">Guardar</button>
-                                                                                                                                                                                                                      <button type="button" class="btn btn-secondary w-100 mt-2" @@click="$emit('cancelar')">Cancelar</button>
-                                                                                                                                                                                                                    </form>
-                                                                                                                                                                                                                  </div>
-                                                                                                                                                                                                                </div>
-                                                                                                                                                                                                              `,
+                                <h5 class="card-title">
+                                    {{ vacanteEditar ? 'Editar Vacante' : 'Crear Vacante' }}
+                                </h5>
+
+                                <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+                                <form @@submit.prevent="enviarFormulario">
+                                    <div class="mb-3">
+                                        <input v-model="form.titulo" class="form-control" placeholder="Título" required>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <textarea v-model="form.descripcion" class="form-control" placeholder="Descripción" required></textarea>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <input v-model.number="form.monto" type="number" class="form-control" placeholder="Monto" required>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <input v-model="form.fechaExpiracion" type="date" class="form-control" required>
+                                    </div>
+
+                                    <button class="btn btn-success w-100" type="submit">Guardar</button>
+                                    <button class="btn btn-secondary w-100 mt-2" type="button" @@click="$emit('cancelar')">
+                                        Cancelar
+                                    </button>
+                                </form>
+
+                            </div>
+                        </div>
+                    `,
             data() {
                 return {
                     form: {
                         titulo: this.vacanteEditar?.titulo || '',
                         descripcion: this.vacanteEditar?.descripcion || '',
                         monto: this.vacanteEditar?.monto || null,
-                        fechaExpiracion: this.vacanteEditar ? this.vacanteEditar.fechaExpiracion.substring(0, 10) : null
+                        fechaExpiracion: this.vacanteEditar
+                            ? this.vacanteEditar.fechaExpiracion.substring(0, 10)
+                            : null
                     },
                     error: null
                 };
@@ -147,29 +167,33 @@
             methods: {
                 async enviarFormulario() {
                     try {
-
-                        const hoy = new Date();
-                        hoy.setHours(0, 0, 0, 0); // Para comparar solo la fecha, sin la hora
-
+                        // Validación de fecha
+                        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
                         const fechaIngresada = new Date(this.form.fechaExpiracion);
 
                         if (!this.form.fechaExpiracion || fechaIngresada <= hoy) {
-                            this.error = 'La fecha de expiración debe ser posterior a la fecha actual.';
+                            this.error = 'La fecha de expiración debe ser posterior a hoy.';
                             return;
                         }
 
+                        // Determinar modo
                         const url = this.vacanteEditar
                             ? `/api/vacantes/${this.vacanteEditar.id}`
                             : '/api/vacantes';
+
                         const method = this.vacanteEditar ? 'put' : 'post';
+
                         if (!this.vacanteEditar) {
                             this.form.usuarioId = @Html.Raw(Json.Serialize(Model?.Id ?? 0));
                             this.form.fechaExpiracion = new Date(this.form.fechaExpiracion).toISOString();
                         }
-                        const res = await axios({ method, url, data: this.form, headers: { 'Content-Type': 'application/json' } });
-                        if (res.status === 200 || res.status === 201 || res.status === 204) {
+
+                        const res = await axios({ method, url, data: this.form });
+
+                        if ([200, 201, 204].includes(res.status)) {
                             this.$emit('creado', res.data);
                         }
+
                     } catch (e) {
                         console.error('Error guardando vacante:', e.response?.data);
                         this.error = e.response?.data?.message || 'Error al guardar vacante';
@@ -179,50 +203,43 @@
         };
 
 
+        /* ============================================================
+           COMPONENTE: PropuestaForm
+        ============================================================ */
         const PropuestaForm = {
             props: {
                 propuestaEditar: { type: Object, default: null },
                 vacanteId: { type: Number, required: true }
             },
             template: `
-                                                <div class="card">
-                                                  <div class="card-body">
-                                                    <h5 class="card-title">
-                                                      {{ propuestaEditar ? 'Editar Propuesta' : 'Crear Propuesta' }}
-                                                    </h5>
-                                                       <div v-if="error" class="alert alert-danger">{{ error }}</div>
-          
-        
-                                                    <form @@submit.prevent="enviarFormulario">
-                                                      <div class="mb-3">
-                                                        <textarea
-                                                          v-model="form.mensaje"
-                                                          class="form-control"
-                                                          placeholder="Mensaje detallado"
-                                                          required
-                                                        ></textarea>
-                                                      </div>
-                                                      <div class="mb-3">
-                                                        <input
-                                                          v-model.number="form.monto"
-                                                          type="number"
-                                                          class="form-control"
-                                                          placeholder="Monto ofrecido"
-                                                          required
-                                                        >
-                                                      </div>
-                                                      <button type="submit" class="btn btn-success w-100">Guardar</button>
-                                                      <button
-                                                        type="button"
-                                                        class="btn btn-secondary w-100 mt-2"
-                                                        @@click="$emit('cancelar')"
-                                                      >
-                                                        Cancelar
-                                                      </button>
-                                                    </form>
-                                                  </div>
-                                                </div>
-                                              `,
+                        <div class="card">
+                            <div class="card-body">
+
+                                <h5 class="card-title">
+                                    {{ propuestaEditar ? 'Editar Propuesta' : 'Crear Propuesta' }}
+                                </h5>
+
+                                <div v-if="error" class="alert alert-danger">{{ error }}</div>
+
+                                <form @@submit.prevent="enviarFormulario">
+                                    <div class="mb-3">
+                                        <textarea v-model="form.mensaje" class="form-control"
+                                                  placeholder="Mensaje detallado" required></textarea>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <input v-model.number="form.monto" type="number"
+                                               class="form-control" placeholder="Monto ofrecido" required>
+                                    </div>
+
+                                    <button class="btn btn-success w-100" type="submit">Enviar</button>
+                                    <button class="btn btn-secondary w-100 mt-2" type="button"
+                                            @@click="$emit('cancelar')">Cancelar</button>
+                                </form>
+
+                            </div>
+                        </div>
+                    `,
             data() {
                 return {
                     form: {
@@ -237,34 +254,19 @@
             methods: {
                 async enviarFormulario() {
                     try {
-                        // Inyectar el userId desde Razor:
-                        this.form.usuarioId = @Html.Raw(Json.Serialize(Model?.Id ?? 0));
-                        this.form.vacanteId = this.vacanteId;
-                        if (!this.form.vacanteId) {
-                            this.error = 'Debe seleccionar una vacante para enviar una propuesta.';
+                        if (!this.vacanteId) {
+                            this.error = 'Debe seleccionar una vacante.';
                             return;
                         }
-
 
                         const url = this.propuestaEditar
                             ? `/api/propuestas/${this.propuestaEditar.id}`
                             : '/api/propuestas';
+
                         const method = this.propuestaEditar ? 'put' : 'post';
 
+                        const res = await axios({ method, url, data: this.form });
 
-                        console.log('Datos que se envían:', {
-                            method,
-                            url,
-                            data: this.form
-                        });
-
-                        const res = await axios({
-                            method,
-                            url,
-                            data: this.form,
-                            headers: { 'Content-Type': 'application/json' }
-                        });
-                        // Aceptar 200, 201 o 204 como éxito
                         if ([200, 201, 204].includes(res.status)) {
                             this.$emit('creado');
                         }
@@ -277,103 +279,143 @@
         };
 
 
+        /* ============================================================
+           APLICACIÓN PRINCIPAL
+        ============================================================ */
         createApp({
-            components: { 'vacante-form': VacanteForm, 'propuesta-form': PropuestaForm },
+            components: {
+                'vacante-form': VacanteForm,
+                'propuesta-form': PropuestaForm
+            },
+
             setup() {
-                // Estado global de vista
-                const viewState = ref('listAll'); // 'none','listAll','listMine','detail','createVac','editVac','createProp'
+
+                /* ---------------------- ESTADO GLOBAL ----------------------- */
+                const viewState = ref('listAll');
                 const selected = ref(null);
                 const vacanteToEdit = ref(null);
                 const items = ref([]);
-                const page = ref(1), size = ref(5), total = ref(0), loading = ref(false);
+
+                const page = ref(1);
+                const size = ref(5);
+                const total = ref(0);
+
+                const loading = ref(false);
                 const filter = ref('');
+
                 const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
-                esModoMisVacantes = ref(false);
-                const totalPages = computed(() => Math.ceil(total.value / size.value) || 1);
-                // controlar fechas
-                const controlarFecha = (fecha) => {
-                    if (!fecha) console.log('Fecha no válida:');
-                    const date = new Date(fecha);
-                    const today = new Date();
-                    if (date < today) {
-                        console.log('Fecha en el pasado:', fecha);
-                        return false;
-                    }
-                };
-                const titleMap = {
-                    listAll: 'Todas las vacantes',
-                    listMine: 'Mis vacantes',
-                    detail: 'Detalles',
-                    createVac: 'Crear Vacante',
-                    editVac: 'Editar Vacante',
-                    createProp: 'Enviar Propuesta'
-                };
                 const lastList = ref('listAll');
+                const esModoMisVacantes = ref(false);
+
+                const totalPages = computed(() =>
+                    Math.ceil(total.value / size.value) || 1
+                );
+
+                /* ---------------------- CAMBIO DE VISTA ----------------------- */
                 function switchView(mode) {
-                    // si entras a una lista, actualizas lastList
                     if (mode === 'listAll' || mode === 'listMine') {
                         lastList.value = mode;
                         loadVacantes(mode === 'listMine');
                     }
                     viewState.value = mode;
                 }
-                const title = computed(() => {
-                    return lastList.value === 'listMine'
+
+                const title = computed(() =>
+                    lastList.value === 'listMine'
                         ? 'Mis vacantes'
-                        : 'Todas las vacantes';
-                });
+                        : 'Todas las vacantes'
+                );
 
-
-                function startCreateVacante() {
+                const startCreateVacante = () => {
                     vacanteToEdit.value = null;
                     viewState.value = 'createVac';
-                }
-                const startEdit = (v) => { vacanteToEdit.value = { ...v }; switchView('editVac'); };
+                };
 
+                const startEdit = (v) => {
+                    vacanteToEdit.value = { ...v };
+                    switchView('editVac');
+                };
+
+                /* ---------------------- POST-GUARDAR VACANTE ----------------------- */
                 const onSaved = async (savedVacante) => {
-                    // 1) Actualiza tu lista
                     await loadVacantes(lastList.value === 'listMine');
 
                     savedVacante.esMio = (savedVacante.usuarioId === userId.value);
 
-                    // 3) Cambia a vista detalle
                     switchView('detail');
-                    // 2) Pon la vacante recién guardada como seleccionada
                     selected.value = savedVacante;
                 };
 
                 const onPropSaved = () => switchView('detail');
-                const selectVacante = (v) => { selected.value = v; switchView('detail'); };
 
-                // CRUD Vacantes
+                const selectVacante = (v) => {
+                    selected.value = v;
+                    switchView('detail');
+                };
+
+                /* ---------------------- CRUD VACANTES ----------------------- */
                 const loadVacantes = async (mine = false) => {
                     loading.value = true;
-                    const params = { page: page.value, size: size.value, usuarioId: mine ? userId.value : null };
+
+                    const params = {
+                        page: page.value,
+                        size: size.value,
+                        mine
+                    };
+
                     if (filter.value) params.search = filter.value;
+
                     const res = await axios.get('/api/vacantes', { params });
+
                     total.value = res.data.total;
-                    items.value = res.data.items.map(i => ({ ...i, esMio: i.usuarioId === userId.value }));
+                    items.value = res.data.items.map(i => ({
+                        ...i,
+                        esMio: i.usuarioId === userId.value
+                    }));
+
                     loading.value = false;
                 };
-                const deleteVacante = async (id) => { await axios.delete(`/api/vacantes/${id}`); switchView('listMine'); };
 
-                // Búsqueda con debounce
+                const deleteVacante = async (id) => {
+                    await axios.delete(`/api/vacantes/${id}`);
+                    switchView('listMine');
+                };
+
+                /* ---------------------- BÚSQUEDA CON DEBOUNCE ----------------------- */
                 let timer;
-                watch(filter, () => { clearTimeout(timer); timer = setTimeout(() => loadVacantes(viewState.value === 'listMine'), 300); });
+                watch(filter, () => {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => {
+                        loadVacantes(viewState.value === 'listMine');
+                    }, 300);
+                });
 
-                // Paginación y fecha
-                const changePage = (n) => { if (n < 1 || n > totalPages.value) return; page.value = n; loadVacantes(viewState.value === 'listMine'); };
-                const formatDate = (iso) => iso ? new Date(iso).toLocaleDateString('es-AR') : '';
+                /* ---------------------- PAGINACIÓN ----------------------- */
+                const changePage = (n) => {
+                    if (n < 1 || n > totalPages.value) return;
+                    page.value = n;
+                    loadVacantes(viewState.value === 'listMine');
+                };
 
-                // Inicializar
+                const formatDate = (iso) =>
+                    iso ? new Date(iso).toLocaleDateString('es-AR') : '';
+
+                /* ---------------------- INICIALIZACIÓN ----------------------- */
                 loadVacantes(false);
 
                 return {
-                    viewState, items, page, totalPages, filter, loading, selected, esModoMisVacantes, lastList,
-                    title, switchView, selectVacante, startEdit, vacanteToEdit,
-                    onSaved, onPropSaved, deleteVacante, changePage, formatDate, startCreateVacante
+                    // Estado
+                    viewState, items, selected, vacanteToEdit,
+                    page, totalPages, filter, loading, esModoMisVacantes,
+                    lastList, title,
+
+                    // Métodos
+                    switchView, selectVacante, startEdit, startCreateVacante,
+                    onSaved, onPropSaved, deleteVacante,
+                    changePage, formatDate
                 };
             }
         }).mount('#vacantes-app');
+
     </script>
 }

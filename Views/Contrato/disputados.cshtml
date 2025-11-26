@@ -1,0 +1,205 @@
+@* Views/Contrato/Disputados.cshtml *@
+@{
+    ViewData["Title"] = "Revisión de Contratos en Disputa";
+}
+
+<div id="disputados-app" class="container mt-4" v-cloak>
+    <h3 class="mb-4 text-center">🛠️ Revisión de Contratos en Disputa</h3>
+
+    <div class="row">
+        <!-- LISTADO DE CONTRATOS -->
+        <div class="col-md-4">
+            <div class="card shadow-sm rounded-3">
+                <div class="card-header bg-dark text-white">
+                    Contratos marcados en disputa
+                </div>
+                <ul class="list-group list-group-flush" id="listaContratos">
+                    <!-- Vue: listado de contratos en disputa -->
+                    <li v-for="c in contratosDisputados" :key="c.id" class="list-group-item list-group-item-action"
+                        :class="{ active: selected && selected.id === c.id }" @@click="selectContrato(c)">
+
+                        <strong>Contrato #{{ c.id }}</strong><br>
+                        <small class="text-muted">
+                            Iniciado: {{ formatDate(c.fechaCreacion) }}
+                        </small>
+
+                        <div>
+                            <span>{{ c.vacanteTitulo }}</span><br>
+                            <span>{{ c.contratanteNombre }} {{ c.contratanteApellido }}</span>
+                        </div>
+                    </li>
+
+                </ul>
+            </div>
+        </div>
+
+        <!-- DETALLES DEL CONTRATO -->
+        <div class="col-md-8">
+            <div v-if="selected" class="card shadow-sm rounded-3">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between">
+                    <span>Detalles del Contrato</span>
+                    <span class="badge bg-danger">En disputa</span>
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Objetivo</h5>
+                    <p>{{ selected.vacanteDescripcion }}</p>
+
+                    <div class="row mb-3">
+                        <div class="col-sm-6">
+                            <strong>Inicio:</strong> {{ formatDate(selected.fechaCreacion) }}
+                        </div>
+                        <div class="col-sm-6">
+                            <strong>Fecha límite:</strong> {{ formatDate(selected.fechaLimite) }}
+                        </div>
+                        <div class="col-sm-6">
+                            <strong>Cancelado en:</strong> {{ formatDate(selected.fechaFinalizacion) }}
+                        </div>
+                    </div>
+
+                    <h6 class="mt-3">Archivos asociados</h6>
+                    <button class="btn btn-link mb-3" type="button" data-bs-toggle="collapse"
+                        data-bs-target="#archivosCollapse" aria-expanded="false" aria-controls="archivosCollapse">
+                        Archivos del Contrato ({{ archivosItem.length }})
+                    </button>
+
+                    <div class="collapse" id="archivosCollapse">
+                        <ul class="list-group">
+                            <li v-for="archivo in archivosItem" :key="archivo.id"
+                                class="list-group-item d-flex justify-content-between align-items-center">
+                                <a :href="archivo.url" target="_blank" rel="noopener noreferrer"
+                                    class="text-decoration-none">
+                                    {{ archivo.nombre_original }}
+                                </a>
+                                <span @@click="deleteArchivo(archivo.id)" class="badge bg-danger">X</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <!-- BOTONES DE ACCIÓN -->
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-success" @@click="resolverContrato(selected.id, 100)">
+                            Liberar 100%
+                        </button>
+                        <button class="btn btn-primary" @@click="resolverContrato(selected.id, 75)">
+                            Liberar 75%
+                        </button>
+                        <button class="btn btn-info" @@click="resolverContrato(selected.id, 50)">
+                            Liberar 50%
+                        </button>
+                        <button class="btn btn-warning" @@click="resolverContrato(selected.id, 25)">
+                            Liberar 25%
+                        </button>
+                        <button class="btn btn-outline-danger" @@click="descartarRevision(selected.id)">
+                            ❌ Descartar revisión
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else class="text-muted text-center mt-5">
+                <em>Selecciona un contrato en disputa para revisarlo.</em>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+
+                const contratosDisputados = ref([]);
+                const selected = ref(null);
+                const archivosItem = ref({});
+                const total = ref(0);
+
+                // Cargar contratos en disputa al iniciar
+                const loadContratosDisputados = async () => {
+                    try {
+                        const response = await axios.get(`/api/contratos/disputes`);
+                        contratosDisputados.value = response.data.items;
+                        total.value = response.data.total;
+                        console.log(contratosDisputados.value);
+                    } catch (error) {
+                        console.error('Error cargando contratos:', error);
+                    }
+                };
+
+
+                // Formatear fecha
+                const formatDate = (dateString) => {
+                    return new Date(dateString).toLocaleDateString('es-ES', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
+                };
+
+                // Seleccionar contrato
+                const selectContrato = async (c) => {
+                    try {
+                        console.log('Seleccionando contrato:', c.id);
+                        const response = await axios.get(`/api/contratos/disputesById/${c.id}`);
+                        selected.value = response.data;
+                        console.log('Contrato seleccionado:', selected.value);
+
+                        try {
+                            const archivos = await axios.get(`/api/archivos/${c.id}`)
+                            archivosItem.value = archivos.data
+                            console.log("Archivos de la tarea:", archivosItem.value)
+                        } catch (error) {
+                            console.error("Error al cargar archivos de la tarea:", error)
+                        }
+                    } catch (error) {
+                        console.error('Error seleccionando contrato:', error);
+                    }
+                };
+
+
+                // Resolver contrato
+                const resolverContrato = async (id, porcentaje) => {
+                    try {
+                        await axios.patch(`/api/contratos/resolver/${id}`, { porcentaje });
+
+                        loadContratosDisputados();
+                        selected.value = null;
+                    } catch (error) {
+                        console.error('Error resolviendo contrato:', error);
+                    }
+                };
+
+
+                // Descartar revisión
+                const descartarRevision = async (id) => {
+                    try {
+                        await axios.patch(`/api/contratos/descartar/${id}`);
+                        loadContratosDisputados();
+                        selected.value = null;
+                    } catch (error) {
+                        console.error('Error descartando revisión:', error);
+                    }
+                };
+
+                loadContratosDisputados();
+
+                return {
+                    contratosDisputados,
+                    selected,
+                    formatDate,
+                    selectContrato,
+                    resolverContrato,
+                    descartarRevision,
+                    archivosItem
+                };
+            }
+        }).mount('#disputados-app');
+
+    </script>
+}

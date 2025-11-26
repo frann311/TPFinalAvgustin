@@ -129,7 +129,7 @@ public class PerfilController : Controller
         // 3) Validar new vs confirm
         if (vm.NewPassword != vm.ConfirmPassword)
         {
-            ModelState.AddModelError("ConfirmPassword", "No coincide con la nueva");
+            ModelState.AddModelError("ConfirmPassword", "La nueva contraseña y su confirmación no coinciden");
         }
 
         Console.WriteLine("Validando...");

@@ -30,66 +30,73 @@ namespace TPFinalAvgustin.Controllers.Api
             [FromForm] List<IFormFile> archivos
         )
         {
-
-            if (archivos == null || archivos.Count == 0)
+            try
             {
-                return BadRequest(new { message = "No se seleccionaron archivos." });
-            }
-            var contrato = await _context.Contratos.FindAsync(contratoId);
-            if (contrato == null)
-            {
-                return NotFound(new { message = "Contrato no encontrado." });
-            }
-            if (!contrato.isActive || contrato.isCancelled)
-            {
-                return BadRequest(new { message = "El contrato no está activo." });
-            }
-            string wwwRoot = _env.WebRootPath;
-            string carpeta = Path.Combine(wwwRoot, "Uploads", "Contratos", contratoId.ToString());
-            Directory.CreateDirectory(carpeta); // crea toda la jerarquía si hace falta
-
-            var archivosGuardados = new List<Archivo>();
-
-            foreach (var file in archivos)
-            {
-                if (file.Length > 0)
+                if (archivos == null || archivos.Count == 0)
                 {
-                    var ext = Path.GetExtension(file.FileName);
-                    var nombreSistema = $"{Guid.NewGuid()}{ext}";
-                    var rutaCompleta = Path.Combine(carpeta, nombreSistema);
-
-                    // Guardar en disco
-                    using var stream = new FileStream(rutaCompleta, FileMode.Create);
-                    await file.CopyToAsync(stream);
-
-                    // Guardar en BD
-                    var archivo = new Archivo
-                    {
-                        ContratoId = contratoId,
-                        nombre_original = file.FileName,
-                        nombre_sistema = nombreSistema,
-                        Url = $"/Uploads/Contratos/{contratoId}/{nombreSistema}",
-                        tipo_mime = file.ContentType,
-                        tamanio = file.Length// puedes completarlo si tienes usuario logueado
-                    };
-
-                    _context.Archivos.Add(archivo);
-                    archivosGuardados.Add(archivo);
+                    return BadRequest(new { message = "No se seleccionaron archivos." });
                 }
+                var contrato = await _context.Contratos.FindAsync(contratoId);
+                if (contrato == null)
+                {
+                    return NotFound(new { message = "Contrato no encontrado." });
+                }
+                if (!contrato.isActive || contrato.isCancelled)
+                {
+                    return BadRequest(new { message = "El contrato no está activo." });
+                }
+                string wwwRoot = _env.WebRootPath;
+                string carpeta = Path.Combine(wwwRoot, "Uploads", "Contratos", contratoId.ToString());
+                Directory.CreateDirectory(carpeta);
 
+                var archivosGuardados = new List<Archivo>();
+
+                foreach (var file in archivos)
+                {
+                    if (file.Length > 0)
+                    {
+                        var ext = Path.GetExtension(file.FileName);
+                        var nombreSistema = $"{Guid.NewGuid()}{ext}";
+                        var rutaCompleta = Path.Combine(carpeta, nombreSistema);
+
+                        // Guardar en disco
+                        using var stream = new FileStream(rutaCompleta, FileMode.Create);
+                        await file.CopyToAsync(stream);
+
+                        // Guardar en BD
+                        var archivo = new Archivo
+                        {
+                            ContratoId = contratoId,
+                            nombre_original = file.FileName,
+                            nombre_sistema = nombreSistema,
+                            Url = $"/Uploads/Contratos/{contratoId}/{nombreSistema}",
+                            tipo_mime = file.ContentType,
+                            tamanio = file.Length// puedes completarlo si tienes usuario logueado
+                        };
+
+                        _context.Archivos.Add(archivo);
+                        archivosGuardados.Add(archivo);
+                    }
+
+                }
+                await _context.SaveChangesAsync();
+
+                return Ok(archivosGuardados);
             }
-            await _context.SaveChangesAsync();
-
-            return Ok(archivosGuardados);
-
-
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error al subir archivos: " + ex.Message);
+                return StatusCode(500, "Error interno del servidor");
+            }
         }
 
 
         [HttpGet("{contratoId}")]
         public async Task<IActionResult> ObtenerArchivosPorContrato(int contratoId)
         {
-            var archivos = await _context.Archivos
+            try
+            {
+                var archivos = await _context.Archivos
                 .Where(a => a.ContratoId == contratoId)
                 .Select(a => new
                 {
@@ -101,37 +108,49 @@ namespace TPFinalAvgustin.Controllers.Api
                 })
                 .ToListAsync();
 
-            return Ok(archivos);
+                return Ok(archivos);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error al obtener archivos: " + ex.Message);
+                return StatusCode(500, "Error interno del servidor");
+            }
+
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> EliminarArchivo(int id)
         {
-            var archivo = await _context.Archivos.FindAsync(id);
-            if (archivo == null)
+            try
             {
-                return NotFound(new { message = "Archivo no encontrado." });
+                var archivo = await _context.Archivos.FindAsync(id);
+                if (archivo == null)
+                {
+                    return NotFound(new { message = "Archivo no encontrado." });
+                }
+                var contrato = await _context.Contratos.FindAsync(archivo.ContratoId);
+                if (contrato == null || !contrato.isActive || contrato.isCancelled)
+                {
+                    return BadRequest(new { message = "El contrato asociado no está activo." });
+                }
+
+                var rutaArchivo = Path.Combine(_env.WebRootPath, archivo.Url.TrimStart('/'));
+                if (System.IO.File.Exists(rutaArchivo))
+                {
+                    System.IO.File.Delete(rutaArchivo);
+                }
+
+                _context.Archivos.Remove(archivo);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Archivo eliminado correctamente." });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error al eliminar el archivo: " + ex.Message);
+                return StatusCode(500, "Error interno del servidor");
             }
 
-            // Verificar si el archivo pertenece a un contrato activo
-            var contrato = await _context.Contratos.FindAsync(archivo.ContratoId);
-            if (contrato == null || !contrato.isActive || contrato.isCancelled)
-            {
-                return BadRequest(new { message = "El contrato asociado no está activo." });
-            }
-
-            // Eliminar el archivo del sistema de archivos
-            var rutaArchivo = Path.Combine(_env.WebRootPath, archivo.Url.TrimStart('/'));
-            if (System.IO.File.Exists(rutaArchivo))
-            {
-                System.IO.File.Delete(rutaArchivo);
-            }
-
-            // Eliminar de la base de datos
-            _context.Archivos.Remove(archivo);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Archivo eliminado correctamente." });
         }
 
 

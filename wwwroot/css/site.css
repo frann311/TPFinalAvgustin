@@ -27,3 +27,6 @@ body {
   padding: 4px 4px;
   border-radius: 4px;
 }
+[v-cloak] {
+    display: none;
+}

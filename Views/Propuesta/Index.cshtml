@@ -1,11 +1,15 @@
 @using System.Security.Claims
 @{
-    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.png";
+    var claimAvatar = User.FindFirstValue("AvatarUrl");
+    var avatarUrl = !string.IsNullOrEmpty(claimAvatar)
+    ? claimAvatar
+    : Url.Content("~/img/default-avatar.jpg");
+
     var VacantesCreadasCount = ViewBag.VacantesCreadasCount ?? 0;
     var PropuestasEnviadasCount = ViewBag.PropuestasEnviadasCount ?? 0;
 }
 
-<div class="container mt-4" id="propuestas-app">
+<div class="container mt-4" v-cloak id="propuestas-app">
     <div class="row">
         <!-- Columna izquierda: perfil y navegación -->
         <div class="col-md-3">
@@ -172,8 +176,9 @@
     </div>
 
     <!-- MODAL CREAR CONTRATO -->
-    <div v-if="modalVisible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg shadow-lg p-5 w-100" style="max-width: 500px;">
+    <div v-if="modalVisible"
+        class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center z-50">
+        <div class="bg-white rounded-lg shadow-lg p-5" style="max-width: 500px; width: 100%;">
             <h5 class="mb-3">Crear Contrato</h5>
 
             <div class="mb-2">
@@ -203,174 +208,251 @@
 @section Scripts {
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
     <script>
         const { createApp, ref, computed, watch } = Vue;
+
         createApp({
             setup() {
-                const items = ref([]);
-                const itemsVacantes = ref([]);
-                const selected = ref(null);
+
+                /* ---------------------------------------------
+                 * REFS (estado reactivo principal)
+                 * --------------------------------------------- */
+                const items = ref([]);              // propuestas
+                const itemsVacantes = ref([]);      // vacantes que tienen propuestas
+                const selected = ref(null);         // propuesta seleccionada
+
                 const page = ref(1);
                 const size = ref(5);
                 const total = ref(0);
+
                 const loading = ref(false);
                 const error = ref(null);
-                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+
                 const lastList = ref('PropuestasEnviadas');
                 const viewState = ref('PropuestasEnviadas');
+
+
+                /* ---------------------------------------------
+                 * COMPUTED
+                 * --------------------------------------------- */
                 const totalPages = computed(() => Math.ceil(total.value / size.value) || 1);
-                const formatDate = iso => iso ? new Date(iso).toLocaleDateString('es-AR') : '';
+
                 const title = computed(() => {
-                    if (viewState.value === 'PropuestasEnviadas') return 'Propuestas Enviadas';
-                    if (viewState.value === 'PropuestasRecibidas') return 'Propuestas Recibidas';
-                    return '';
+                    switch (viewState.value) {
+                        case 'PropuestasEnviadas': return 'Propuestas Enviadas';
+                        case 'PropuestasRecibidas': return 'Propuestas Recibidas';
+                        default: return '';
+                    }
                 });
+
                 const nonItemaText = computed(() => {
-                    if (viewState.value === 'PropuestasEnviadas') return 'No has enviado propuestas aún.';
-                    if (viewState.value === 'PropuestasRecibidas') return 'No tienes propuestas recibidas.';
-                    return '';
+                    switch (viewState.value) {
+                        case 'PropuestasEnviadas': return 'No has enviado propuestas aún.';
+                        case 'PropuestasRecibidas': return 'No tienes propuestas recibidas.';
+                        default: return '';
+                    }
                 });
+
+                const formatDate = (iso) =>
+                    iso ? new Date(iso).toLocaleDateString('es-AR') : '';
+
+
+                /* ---------------------------------------------
+                 * VALIDACIONES
+                 * --------------------------------------------- */
                 const validarFecha = (dateStr) => {
                     const today = new Date();
-                    const inputDate = new Date(dateStr);
-                    return inputDate > today;
-                }
+                    today.setHours(0, 0, 0, 0);
+
+                    const minDate = new Date(today);
+                    minDate.setDate(minDate.getDate() + 5); // mínimo +5 días
+
+                    const input = new Date(dateStr);
+                    return input >= minDate;
+                };
 
 
+                /* ---------------------------------------------
+                 * CAMBIO DE VISTAS
+                 * --------------------------------------------- */
                 function switchView(mode) {
-                    // si entras a una lista, actualizas lastList
-                    selected.value = null; // resetea la propuesta seleccionada
+                    selected.value = null;
+
                     if (mode === 'PropuestasEnviadas') {
                         lastList.value = mode;
                         viewState.value = mode;
                         loadPropuestas();
+
                     } else if (mode === 'PropuestasRecibidas') {
                         lastList.value = mode;
-                        loadVacantes(mode === 'PropuestasRecibidas');
                         viewState.value = mode;
+                        loadVacantes();
                         items.value = [];
                     }
                 }
 
+
+                /* ---------------------------------------------
+                 * CARGA DE VACANTES
+                 * --------------------------------------------- */
                 const loadVacantes = async () => {
                     try {
                         loading.value = true;
-                        const params = { usuarioId: userId.value };
-                        const { data } = await axios.get('/api/vacantes/mis-vacantes-con-propuestas', { params });
-
+                        const { data } = await axios.get('/api/vacantes/mis-vacantes-con-propuestas');
                         itemsVacantes.value = data;
-                    } catch (error) {
-                        console.error("Error al cargar vacantes con propuestas", error);
+                    } catch (err) {
+                        console.error("Error al cargar vacantes:", err);
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+
+                /* ---------------------------------------------
+                 * SELECCIONAR VACANTE
+                 * --------------------------------------------- */
+                const seleccionarVacante = (vacante) => {
+                    selected.value = null;
+                    items.value = [];
+                    loadPropuestas(vacante.id);
+                };
+
+
+                /* ---------------------------------------------
+                 * CARGA DE PROPUESTAS
+                 * --------------------------------------------- */
+                async function loadPropuestas(vacanteId = null) {
+                    try {
+                        loading.value = true;
+
+                        const params = {
+                            page: page.value,
+                            size: size.value,
+                            mias: true
+                        };
+
+                        if (vacanteId) params.vacanteId = vacanteId;
+
+                        const { data } = await axios.get('/api/propuestas/listar', { params });
+
+                        total.value = data.total;
+                        items.value = data.items;
+
+                    } catch (err) {
+                        console.error("Error al cargar propuestas:", err);
                     } finally {
                         loading.value = false;
                     }
                 }
-                const seleccionarVacante = async (vacante) => {
-                    // al seleccionar una vacante, se cargan las propuestas de esa vacante
-                    selected.value = null; // resetea la propuesta seleccionada
-                    items.value = []; // limpia las propuestas actuales
-                    loadPropuestas(vacante.id);
-                }
 
 
-
-                async function loadPropuestas(vacanteId = null) {
-                    loading.value = true;
-                    items.value = [];
-                    const params = { page: page.value, size: size.value, usuarioId: userId.value };
-                    if (vacanteId) params.vacanteId = vacanteId;
-
-                    const { data } = await axios.get('/api/propuestas/listar', { params });
-
-                    total.value = data.total;
-
-                    // asegurarse de incluir relaciones: vacante y usuario
-                    items.value = data.items;
-                    @* console.log("Propuestas cargadas:", items.value); *@
-                        loading.value = false;
-                }
-
-                function selectPropuesta(p) {
+                /* ---------------------------------------------
+                 * SELECCIONAR PROPUESTA
+                 * --------------------------------------------- */
+                const selectPropuesta = (p) => {
                     selected.value = p;
-                }
-                function changePage(n) {
+                };
+
+
+                /* ---------------------------------------------
+                 * PAGINADO
+                 * --------------------------------------------- */
+                const changePage = (n) => {
                     if (n < 1 || n > totalPages.value) return;
                     page.value = n;
                     loadPropuestas();
-                }
+                };
 
+
+                /* ---------------------------------------------
+                 * CARGA INICIAL
+                 * --------------------------------------------- */
                 loadPropuestas();
 
-                // Modal logic
+
+                /* ---------------------------------------------
+                 * MODAL DE CONTRATO
+                 * --------------------------------------------- */
                 const modalVisible = ref(false);
                 const fechaLimite = ref(null);
 
-                function abrirModalContrato() {
+                const abrirModalContrato = () => {
                     if (!selected.value) return;
                     fechaLimite.value = null;
                     modalVisible.value = true;
-                }
-                async function crearContrato() {
-                    if (!selected.value || !fechaLimite.value) {
-                        error.value = "selecciona una propuesta y establece una fecha límite."
+                };
 
+                const crearContrato = async () => {
+                    if (!selected.value || !fechaLimite.value) {
+                        error.value = "Selecciona una propuesta y establece una fecha límite.";
                         return;
                     }
-                    const isValidDate = validarFecha(fechaLimite.value);
-                    if (!isValidDate) {
-                        error.value = "La fecha límite debe ser una fecha futura.";
+
+                    if (!validarFecha(fechaLimite.value)) {
+                        error.value = "La fecha límite debe ser mínimo a los 5 días.";
                         return;
                     }
 
                     try {
                         const today = new Date();
+
                         const contratoData = {
                             PropuestaId: selected.value.id,
                             FechaLimite: fechaLimite.value,
                             FechaCreacion: today.toISOString().split('T')[0],
                             isActive: true,
                             isCancelled: false,
-                            ContratanteId: userId.value,
-                            ContratadoId: selected.value.usuario.id
-                        }
-                        console.log("Datos del contrato a crear:", contratoData);
-                        console.log("monto:", selected.value.monto);
-                        const response = await axios.post('/api/contratos', {
-                            contrato: contratoData,
-                            monto: selected.value.monto
-                        });
-                        console.log("Contrato creado:", response.data);
+                            ContratadoId: selected.value.usuario.id,
+                            estado_disputa: "Ninguna"
+                        };
 
-                        if (response.status === 201 || response.status === 200) {
-                            // recargar las propuestas
+                        const payload = {
+                            Contrato: contratoData,
+                            Monto: selected.value.monto
+                        };
+
+                        const response = await axios.post('/api/contratos', payload);
+
+                        if (response.status === 200 || response.status === 201) {
                             await loadPropuestas(selected.value.vacanteId);
-                            const prop = selected.value;
-                            selected.value = null; // resetea la propuesta seleccionada
-                            selectPropuesta(prop); // vuelve a seleccionar la propuesta creada
+
+                            // aceptar propuesta luego de crear contrato
                             try {
                                 await axios.patch(`/api/propuestas/${selected.value.id}/aceptar`, {
-                                    propuestaId: selected.value.id,
+                                    propuestaId: selected.value.id
                                 });
-
-
-                            } catch (error) {
-                                console.error("contrato creado, propuesta no aceptada:", error);
-                                alert("contrato creado, propuesta no aceptada");
+                            } catch (err) {
+                                console.error("Contrato creado, pero fallo aceptar propuesta:", err);
                             }
 
+                            modalVisible.value = false;
+                            selected.value = null;
                         }
 
-
-                        modalVisible.value = false;
-
                     } catch (err) {
-                        console.error(err);
-                        alert("Error al crear contrato");
+                        console.error("Error creando contrato:", err);
+                        alert("Error al crear contrato: " + (err.response?.data || err.message));
                     }
-                }
+                };
 
 
-                return { items, itemsVacantes, selected, page, totalPages, loading, nonItemaText, title, selectPropuesta, seleccionarVacante, changePage, formatDate, viewState, switchView, abrirModalContrato, crearContrato, modalVisible, fechaLimite, error };
+                /* ---------------------------------------------
+                 * RETORNO A LA VISTA
+                 * --------------------------------------------- */
+                return {
+                    items, itemsVacantes, selected,
+                    page, totalPages,
+                    loading, error,
+
+                    title, nonItemaText, formatDate,
+                    viewState, switchView,
+
+                    selectPropuesta, seleccionarVacante,
+                    changePage, abrirModalContrato, crearContrato,
+
+                    modalVisible, fechaLimite
+                };
             }
         }).mount('#propuestas-app');
     </script>

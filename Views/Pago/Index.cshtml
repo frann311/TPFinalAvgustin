@@ -1,9 +1,13 @@
 @using System.Security.Claims@{
-    var avatarUrl = User.FindFirstValue("AvatarUrl") ?? "/img/default-avatar.jpg";
+    var claimAvatar = User.FindFirstValue("AvatarUrl");
+    var avatarUrl = !string.IsNullOrEmpty(claimAvatar)
+    ? claimAvatar
+    : Url.Content("~/img/default-avatar.jpg");
+
 }
 
 
-<div class="container mt-4" id="pagos-app">
+<div class="container mt-4" v-cloak id="pagos-app">
     <div class="row">
         <!-- Columna izquierda: menú lateral con filtros -->
         <div class="col-md-3">
@@ -75,43 +79,67 @@
 @section Scripts {
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
     <script>
-        const { createApp, ref, computed, watch, reactive } = Vue;
+        const { createApp, ref, reactive, computed } = Vue;
+
         createApp({
             setup() {
+
+                // --------------------------------------
+                //  Refs principales
+                // --------------------------------------
                 const items = ref([]);
                 const selected = ref(null);
+
                 const page = ref(1);
                 const size = ref(5);
                 const total = ref(0);
                 const loading = ref(false);
-                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+
                 const viewState = ref('Pagos');
-                const totalPages = computed(() => Math.ceil(total.value / size.value) || 1);
-                const formatDate = iso => iso ? new Date(iso).toLocaleDateString('es-AR') : '';
-                const title = computed(() => {
-                    if (viewState.value === 'Pagos') return 'historial de pagos';
-                    return '';
-                });
+
+                // --------------------------------------
+                //  Computed
+                // --------------------------------------
+                const totalPages = computed(() =>
+                    Math.ceil(total.value / size.value) || 1
+                );
+
+                const formatDate = (iso) =>
+                    iso ? new Date(iso).toLocaleDateString('es-AR') : '';
+
+                const title = computed(() =>
+                    viewState.value === 'Pagos' ? 'Historial de pagos' : ''
+                );
+
+                // --------------------------------------
+                //  Filtros reactivos
+                // --------------------------------------
                 const filtros = reactive({
                     estado: null,
                     fechaDesde: null,
                     fechaHasta: null
                 });
 
-
+                // --------------------------------------
+                //  Switch de vistas
+                // --------------------------------------
                 function switchView(mode) {
-                    // si entras a una lista, actualizas lastList
-                    selected.value = null; // resetea la propuesta seleccionada
+                    selected.value = null;
+
                     if (mode === 'Pagos') {
                         viewState.value = mode;
-                        loadPropuestas();
-                    } else if (mode === 'otra cosa') {
+                        loadPagos();
+                    } else {
                         viewState.value = mode;
                         items.value = [];
                     }
                 }
 
+                // --------------------------------------
+                //  Cargar pagos con filtros + paginación
+                // --------------------------------------
                 const loadPagos = async () => {
                     try {
                         loading.value = true;
@@ -119,36 +147,45 @@
                         const params = {
                             page: page.value,
                             size: size.value,
-                            usuarioId: userId.value
+                            mine: true
                         };
 
-                        // Solo agregás si tienen valor
+                        // Agregar filtros activos
                         if (filtros.estado) params.estado = filtros.estado;
                         if (filtros.fechaDesde) params.fechaDesde = filtros.fechaDesde;
                         if (filtros.fechaHasta) params.fechaHasta = filtros.fechaHasta;
+
                         console.log("Cargando pagos con filtros:", params);
 
                         const { data } = await axios.get('/api/pagos/get-pagos', { params });
 
                         items.value = data.items ?? [];
                         total.value = data.total ?? 0;
+
                         console.log("Pagos cargados:", items.value);
-                    } catch (err) {
+                    }
+                    catch (err) {
                         console.error("Error al cargar pagos:", err);
-                    } finally {
+                    }
+                    finally {
                         loading.value = false;
                     }
                 };
 
-
-
+                // --------------------------------------
+                //  Ver detalle de un pago
+                // --------------------------------------
                 const seleccionarPago = async (pago) => {
-                    // al seleccionar una vacante, se cargan las propuestas de esa vacante
-                    selected.value = null; // resetea la propuesta seleccionada
-                    items.value = []; // limpia las propuestas actuales
+                    selected.value = null;
+                    items.value = [];
+
                     const { data } = await axios.get(`/api/pagos/${pago.id}`);
                     selected.value = data;
-                }
+                };
+
+                // --------------------------------------
+                //  Reset filtros
+                // --------------------------------------
                 const resetFiltros = () => {
                     filtros.estado = null;
                     filtros.fechaDesde = null;
@@ -156,35 +193,42 @@
                     loadPagos();
                 };
 
-                function changePage(n) {
+                // --------------------------------------
+                //  Paginación
+                // --------------------------------------
+                const changePage = (n) => {
                     if (n < 1 || n > totalPages.value) return;
                     page.value = n;
-                    loadPropuestas();
-                }
+                    loadPagos();
+                };
 
+                // Cargar inicial
                 loadPagos();
 
+                // --------------------------------------
+                //  Exponer al template
+                // --------------------------------------
                 return {
                     items,
                     selected,
                     page,
                     size,
                     total,
-                    changePage,
                     loading,
-                    userId,
+
                     viewState,
                     totalPages,
-                    formatDate,
                     title,
+                    filtros,
+
+                    formatDate,
                     switchView,
                     loadPagos,
                     seleccionarPago,
-                    filtros,
-                    resetFiltros
+                    resetFiltros,
+                    changePage
                 };
             }
         }).mount('#pagos-app');
-
     </script>
 }

@@ -2,7 +2,7 @@
     ViewData["Title"] = "Contratos";
 }
 
-<div id="contratos-app" class="container mt-4">
+<div id="contratos-app" v-cloak class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>{{title}}</h2>
 
@@ -57,14 +57,26 @@
 
                     <!-- Cabecera del contrato -->
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h4 class="card-title mb-0">Contrato #{{ selected.id }}</h4>
+                        <h4 class="card-title mb-0">Contrato </h4>
                         <div>
+                            <!-- Badge para estado principal (cancelado/activo/finalizado) -->
                             <span class="badge" :class="{
-                'bg-success': selected.isActive && !selected.isCancelled,
-                'bg-danger': selected.isCancelled,
-                'bg-secondary': !selected.isActive && !selected.isCancelled
-            }">
+                                'bg-success': selected.isActive && !selected.isCancelled,
+                                'bg-danger': selected.isCancelled,
+                                'bg-secondary': !selected.isActive && !selected.isCancelled
+                            }">
                                 {{ selected.isCancelled ? 'Cancelado' : selected.isActive ? 'Activo' : 'Finalizado' }}
+                            </span>
+
+                            <!-- Badge para estado de disputa cuando existe y no es 'Ninguna' -->
+                            <span v-if="selected.estado_disputa && selected.estado_disputa !== 'Ninguna'"
+                                class="badge bg-warning ms-1">
+                                {{
+                                selected.estado_disputa === 'EnRevision' ? 'Solicitud de Revisión En Proceso' :
+                                selected.estado_disputa === 'Rechazada' ? 'Solicitud de Revisión Rechazada' :
+                                selected.estado_disputa === 'Aprobada' ? 'Solicitud de Revisión Aprobada' :
+                                selected.estado_disputa
+                                }}
                             </span>
                             <span v-if="selected.fechaLimite < today" class="badge bg-warning text-dark">
                                 Contrato atrasado
@@ -207,95 +219,124 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
     <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref } = Vue;
 
         createApp({
             setup() {
-                const archivosItem = ref([]);
-                const userId = ref(@Html.Raw(Json.Serialize(Model.Id)));
+
+                // ======================================================
+                // ESTADO PRINCIPAL
+                // ======================================================
                 const items = ref([]);
-                const loading = ref(false);
                 const selected = ref(null);
+                const archivosItem = ref([]);
+
+                const loading = ref(false);
                 const total = ref(0);
+
                 const viewState = ref('ContratosEnCurso');
                 const title = ref("Mis Contratos");
-                const today = new Date().toISOString().split('T')[0]; // formato YYYY-MM-DD
+
+                const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
 
-                function formatDate(fecha) {
-                    return new Date(fecha).toLocaleDateString();
-                }
+                // ======================================================
+                // HELPERS
+                // ======================================================
+                const formatDate = (fecha) =>
+                    new Date(fecha).toLocaleDateString();
 
-                async function selectContrato(c) {
+
+                // ======================================================
+                // API: CARGA DE CONTRATOS
+                // ======================================================
+                const selectContrato = async (id) => {
                     try {
                         loading.value = true;
-                        const response = await axios.get(`/api/contratos/${c}`);
-                        selected.value = response.data;
+
+                        const { data } = await axios.get(`/api/contratos/${id}`);
+                        selected.value = data;
+
                         console.log("Contrato seleccionado:", selected.value);
+
                     } catch (error) {
                         console.error("Error al seleccionar contrato:", error);
+
                     } finally {
                         loading.value = false;
                     }
+                };
 
-                }
-
-                async function loadContratosEnCurso() {
+                const loadContratosEnCurso = async () => {
                     loading.value = true;
                     items.value = [];
 
                     try {
-                        const ContratanteId = userId.value;
-                        console.log("Cargando contratos en curso para el usuario:", ContratanteId);
-                        const { data } = await axios.get(`/api/contratos/en-curso/${ContratanteId}`
-                        );
+                        console.log("Cargando contratos en curso");
+
+                        const { data } = await axios.get(`/api/contratos/en-curso`);
                         items.value = data.items;
                         total.value = data.total;
-                        console.log("contratos en curso cargados:", total.value);
-                        console.log("Contratos en curso:", items.value);
+
+                        console.log("Contratos cargados:", total.value);
+
                     } catch (error) {
                         console.error("Error al cargar contratos en curso:", error);
+
                     } finally {
                         loading.value = false;
                     }
-                }
+                };
 
-                async function loadContratosHistorial() {
+                const loadContratosHistorial = async () => {
                     loading.value = true;
                     items.value = [];
+
                     try {
-                        const ContratanteId = userId.value;
-                        console.log("Cargando historial de contratos para el usuario:", ContratanteId);
-                        const { data } = await axios.get(`/api/contratos/historial/${ContratanteId}`);
+                        console.log("Cargando historial de contratos");
+
+                        const { data } = await axios.get(`/api/contratos/historial`);
                         items.value = data.items;
                         total.value = data.total;
-                        console.log("Historial de contratos cargados:", total.value);
-                        console.log("Historial de contratos:", items.value);
+
+                        console.log("Historial cargado:", total.value);
+
                     } catch (error) {
-                        console.error("Error al cargar historial de contratos:", error);
+                        console.error("Error al cargar historial:", error);
+
                     } finally {
                         loading.value = false;
                     }
-                }
+                };
 
-                function switchView(mode) {
+
+                // ======================================================
+                // CAMBIO DE VISTA (TABS)
+                // ======================================================
+                const switchView = (mode) => {
                     selected.value = null;
                     viewState.value = mode;
+
                     if (mode === 'ContratosEnCurso') {
                         loadContratosEnCurso();
                         title.value = "Contratos en Curso";
+
                     } else if (mode === 'ContratosHistorial') {
                         loadContratosHistorial();
                         title.value = "Historial de Contratos";
                     }
-                }
-
-                async function cancelarContrato(id) {
+                };
 
 
+                // ======================================================
+                // ACCIONES SOBRE CONTRATOS (cancelar / finalizar)
+                // ======================================================
+                const cancelarContrato = async (id) => {
                     try {
                         loading.value = true;
+
                         await axios.post(`/api/contratos/cancelar/${id}`);
+
                         items.value = items.value.filter(c => c.id !== id);
                         selected.value = null;
 
@@ -304,89 +345,113 @@
 
                     } finally {
                         loading.value = false;
-                        modalCancelarVisible.value = false; // Cerrar modal después de cancelar
+                        modalCancelarVisible.value = false;
                     }
-                }
-                async function finalizarContrato(id) {
+                };
+
+                const finalizarContrato = async (id) => {
                     try {
                         loading.value = true;
 
-
                         await axios.patch(`/api/contratos/finalizar/${id}`);
 
-                        // Actualizar frontend
                         items.value = items.value.filter(c => c.id !== id);
                         selected.value = null;
 
                     } catch (error) {
                         console.error("Error al finalizar contrato:", error);
+
                     } finally {
                         loading.value = false;
                         modalFinalizarVisible.value = false;
                     }
-                }
+                };
 
-                async function obtenerArchivos() {
+
+                // ======================================================
+                // ARCHIVOS
+                // ======================================================
+                const obtenerArchivos = async () => {
                     archivosItem.value = [];
+
                     try {
-                        const archivos = await axios.get(`/api/archivos/${selected.value.id}`);
-                        archivosItem.value = archivos.data;
+                        const { data } = await axios.get(`/api/archivos/${selected.value.id}`);
+                        archivosItem.value = data;
+
                         console.log("Archivos obtenidos:", archivosItem.value);
+
                     } catch (error) {
-                        console.error(error);
-                    }
-                }
-
-
-
-                // Modales
-                const modalCancelarVisible = ref(false);
-                const modalArchivosVisible = ref(false);
-                const modalFinalizarVisible = ref(false);
-                const abrirModal = (tipo) => {
-                    if (tipo === 'Contrato') {
-                        modalArchivosVisible.value = false;
-                        modalFinalizarVisible.value = false;
-                        modalCancelarVisible.value = true;
-                    } else if (tipo === 'Archivos') {
-                        modalCancelarVisible.value = false;
-                        modalFinalizarVisible.value = false;
-                        archivosItem.value = [];
-                        obtenerArchivos();
-                        modalArchivosVisible.value = true;
-                    } else if (tipo === 'Finalizar') {
-                        modalCancelarVisible.value = false;
-                        modalArchivosVisible.value = false;
-                        // Lógica para abrir modal de finalizar contrato
-                        modalFinalizarVisible.value = true;
+                        console.error("Error al obtener archivos:", error);
                     }
                 };
 
 
+                // ======================================================
+                // MODALES
+                // ======================================================
+                const modalCancelarVisible = ref(false);
+                const modalArchivosVisible = ref(false);
+                const modalFinalizarVisible = ref(false);
 
+                const abrirModal = (tipo) => {
+
+                    // Reset de estados
+                    modalCancelarVisible.value = false;
+                    modalArchivosVisible.value = false;
+                    modalFinalizarVisible.value = false;
+
+                    switch (tipo) {
+
+                        case 'Contrato':
+                            modalCancelarVisible.value = true;
+                            break;
+
+                        case 'Archivos':
+                            archivosItem.value = [];
+                            obtenerArchivos();
+                            modalArchivosVisible.value = true;
+                            break;
+
+                        case 'Finalizar':
+                            modalFinalizarVisible.value = true;
+                            break;
+                    }
+                };
+
+
+                // ======================================================
+                // CARGA INICIAL
+                // ======================================================
                 switchView('ContratosEnCurso');
 
 
+                // ======================================================
+                // RETORNO A LA VISTA
+                // ======================================================
                 return {
-                    userId,
                     items,
-                    loading,
                     selected,
+                    archivosItem,
+
+                    loading,
                     total,
                     viewState,
+                    title,
+                    today,
+
+                    // Funciones
                     selectContrato,
                     switchView,
                     formatDate,
                     cancelarContrato,
+                    finalizarContrato,
+                    obtenerArchivos,
+
+                    // Modales
                     abrirModal,
                     modalCancelarVisible,
                     modalArchivosVisible,
                     modalFinalizarVisible,
-                    title,
-                    today,
-                    finalizarContrato,
-                    archivosItem,
-                    obtenerArchivos,
                 };
             }
         }).mount('#contratos-app');

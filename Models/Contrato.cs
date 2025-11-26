@@ -25,6 +25,8 @@ namespace TPFinalAvgustin.Models
         public bool isActive { get; set; }
         public bool isCancelled { get; set; }
 
+        public string estado_disputa { get; set; } // Activo, Finalizado, Disputado, Cancelado
+
         // Fechas importantes
         public DateTime FechaCreacion { get; set; }
         public DateTime FechaLimite { get; set; }

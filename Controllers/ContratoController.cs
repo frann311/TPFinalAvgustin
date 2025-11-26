@@ -44,6 +44,18 @@ namespace TPFinalAvgustin.Controllers
             return View(model);
         }
 
+        [HttpGet("disputados")]
+        [Authorize(Roles = "Administrador")]
+        public IActionResult Disputados()
+        {
+            var usuarioId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var model = new Usuario
+            {
+                Id = usuarioId != null ? int.Parse(usuarioId) : 0,
+            };
+            return View(model);
+        }
+
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {

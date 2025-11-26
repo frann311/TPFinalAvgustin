@@ -28,135 +28,196 @@ namespace TPFinalAvgustin.Controllers.Api
         public async Task<ActionResult> GetVacantes(
             [FromQuery] int page = 1,
             [FromQuery] int size = 10,
-            [FromQuery] int? usuarioId = null,
+            [FromQuery] bool? mine = false,
             [FromQuery] string? search = null)
 
         {
-            var ID = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var id = ID != null ? int.Parse(ID) : 0;
-            var query = _context.Vacantes.AsQueryable();
-
-
-            if (!string.IsNullOrEmpty(search))
-                query = query.Where(v => v.Titulo.Contains(search));
-
-            if (usuarioId != null)
+            try
             {
-                query = query.Where(v => v.UsuarioId == usuarioId);
+                var query = _context.Vacantes.AsQueryable();
+                var usuarioId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Titulo.Contains(search));
+                if (mine == true)
+                {
+                    query = query.Where(v => v.UsuarioId == usuarioId);
+                }
+                else
+                {
+                    query = query.Where(v => v.UsuarioId != usuarioId);
+                }
+                Console.WriteLine("ID DEL USUARIO ENVIADO EN PETICION: " + usuarioId);
+                if (mine != true)
+                {
+                    query = query.Where(v => v.FechaExpiracion >= DateTime.Today);
+                }
+
+
+                var total = await query.CountAsync();
+                var items = await query
+                    .Where(v => v.IsAbierta)  //  Vacantes abiertas
+                    .OrderBy(v => v.Id)
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    total,
+                    page,
+                    size,
+                    items
+                });
             }
-            else
+            catch (Exception ex)
             {
-                query = query.Where(v => v.UsuarioId != id);
-            }
-            Console.WriteLine("ID DEL USUARIO ENVIADO EN PETICION: " + usuarioId);
-            if (usuarioId == null)
-            {
-                query = query.Where(v => v.FechaExpiracion >= DateTime.Today);
+                Console.WriteLine($"Error al obtener vacantes: {ex.Message}");
+                return StatusCode(500, "Ocurrió un error inesperado al obtener las vacantes.");
             }
 
-
-            var total = await query.CountAsync();
-            var items = await query
-                .Where(v => v.IsAbierta)  //  Vacantes abiertas
-                .OrderBy(v => v.Id)
-                .Skip((page - 1) * size)
-                .Take(size)
-                .ToListAsync();
-
-            return Ok(new
-            {
-                total,
-                page,
-                size,
-                items
-            });
         }
 
 
-        [HttpGet("{id}")]  // 7. GET /api/vacantes/{id}
+        [HttpGet("{id}")]
 
         public async Task<ActionResult<Vacante>> GetVacanteById(int id)
         {
-            var v = await _context.Vacantes.FindAsync(id);  // 8. Busca por PK
-            if (v == null)
-                return NotFound();                           // 9. Devuelve 404 si no existe
-            return Ok(v);                                    // 10. Devuelve 200 OK + JSON
+
+            try
+            {
+                var v = await _context.Vacantes.FindAsync(id);
+                if (v == null)
+                    return NotFound();
+                return Ok(v);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al obtener vacante por ID: {ex.Message}");
+                return StatusCode(500, "Ocurrió un error inesperado al obtener la vacante.");
+            }
         }
 
 
 
-        [HttpPost]  // 1. Asocia este método al verbo POST y a la ruta base /api/vacantes
-                    // 2. (Opcional) si el controller ya tiene [AllowAnonymous], no es estrictamente necesario aquí
+        [HttpPost]
         public async Task<ActionResult<Vacante>> CreateVacante(
-            [FromBody] Vacante vacante)  // 3. Model binding: deserializa el JSON del body a este parámetro
+            [FromBody] Vacante vacante)
         {
-            if (!ModelState.IsValid)  // 4. Valida el modelo
-                return BadRequest(ModelState);  // 5. Devuelve 400 Bad Request si hay errores
-            if (vacante.FechaExpiracion < DateTime.Now)
-                return BadRequest("La fecha de expiración no puede ser en el pasado");
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+                if (vacante.FechaExpiracion < DateTime.Now)
+                    return BadRequest("La fecha de expiración no puede ser en el pasado");
 
+                _context.Vacantes.Add(vacante);
+                await _context.SaveChangesAsync();
+                return Ok(vacante);
+            }
+            catch (Exception ex)
+            {
 
-            // 4. Marca la entidad como "nueva" en el contexto EF Core
-            _context.Vacantes.Add(vacante);
+                Console.WriteLine($"Error al crear vacante: {ex.Message}");
+                return StatusCode(500, "Ocurrió un error inesperado al crear la vacante.");
+            }
 
-            // 5. Inserta realmente en la base de datos dentro de una transacción
-            await _context.SaveChangesAsync();
-
-            // 6. Devuelve 201 Created, con cabecera Location apuntando al GET individual
-            return Ok(vacante);                   // cuerpo de la respuesta: el objeto creado
         }
 
 
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateVacante(int id, [FromBody] Vacante dto)
         {
+            try
+            {
+                var usuarioId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var v = await _context.Vacantes.FindAsync(id);
+                if (v == null) return NotFound();
+                if (v.UsuarioId != usuarioId)
+                    return Forbid("No tienes permiso para modificar esta vacante");
+                if (dto.FechaExpiracion < DateTime.Now)
+                    return BadRequest("La fecha de expiración no puede ser en el pasado");
+                if (!dto.IsAbierta)
+                    return BadRequest("La vacante debe estar abierta para ser modificada");
 
-            var v = await _context.Vacantes.FindAsync(id);
-            if (v == null) return NotFound();
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-            if (dto.FechaExpiracion < DateTime.Now)
-                return BadRequest("La fecha de expiración no puede ser en el pasado");
-            if (!dto.IsAbierta)
-                return BadRequest("La vacante debe estar abierta para ser modificada");
+                v.Titulo = dto.Titulo;
+                v.Descripcion = dto.Descripcion;
+                v.Monto = dto.Monto;
+                v.FechaExpiracion = dto.FechaExpiracion;
+                v.IsAbierta = dto.IsAbierta;
+                await _context.SaveChangesAsync();
+                return Ok(v); // 204
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al actualizar vacante: {ex.Message}");
+                return StatusCode(500, "Ocurrió un error inesperado al actualizar la vacante.");
+            }
 
-            v.Titulo = dto.Titulo;
-            v.Descripcion = dto.Descripcion;
-            v.Monto = dto.Monto;
-            v.FechaExpiracion = dto.FechaExpiracion;
-            v.IsAbierta = dto.IsAbierta;
-            await _context.SaveChangesAsync();
-            return Ok(v); // 204
         }
+
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteVacante(int id)
         {
-            var v = await _context.Vacantes.FindAsync(id);
-            if (v == null) return NotFound();
-            if (!v.IsAbierta)
-                return BadRequest("La vacante debe estar abierta para ser eliminada");
-            _context.Vacantes.Remove(v);
-            await _context.SaveChangesAsync();
-            return NoContent();
+
+            try
+            {
+                var usuarioId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var v = await _context.Vacantes.FindAsync(id);
+                if (v == null)
+                    return NotFound();
+
+                if (v.UsuarioId != usuarioId)
+                    return Forbid("No tienes permiso para eliminar esta vacante");
+
+                if (!v.IsAbierta)
+                    return BadRequest("La vacante debe estar abierta para ser eliminada");
+
+                _context.Vacantes.Remove(v);
+                await _context.SaveChangesAsync();
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error al eliminar vacante: {ex.Message}");
+                return StatusCode(500, "Ocurrió un error inesperado al eliminar la vacante.");
+            }
         }
 
-        [HttpGet("mis-vacantes-con-propuestas")]
-        [AllowAnonymous]
-        public async Task<ActionResult> GetMisVacantesConPropuestas([FromQuery] int usuarioId)
-        {
-            var lista = await _context.Vacantes
-                .AsNoTracking()
-                .Where(v => v.UsuarioId == usuarioId)
-                .Select(v => new
-                {
-                    v.Id,
-                    v.Titulo,
-                    v.Descripcion,
-                    PropuestasCount = v.Propuestas.Count()
-                })
-                .ToListAsync();
 
-            return Ok(lista);
+        [HttpGet("mis-vacantes-con-propuestas")]
+        public async Task<ActionResult> GetMisVacantesConPropuestas()
+        {
+            try
+            {
+                var usuarioId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                Console.WriteLine("ID DEL USUARIO AUTENTICADO: " + usuarioId);
+
+                // 2️⃣ Consultar las vacantes de ese usuario
+                var lista = await _context.Vacantes
+                    .AsNoTracking()
+                    .Where(v => v.UsuarioId == usuarioId)
+                    .Select(v => new
+                    {
+                        v.Id,
+                        v.Titulo,
+                        v.Descripcion,
+                        PropuestasCount = v.Propuestas.Count()
+                    })
+                    .ToListAsync();
+
+                // 3️⃣ Devolver resultado
+                return Ok(lista);
+            }
+            catch (Exception ex)
+            {
+
+                Console.WriteLine($"Error al obtener vacantes con propuestas: {ex.Message}");
+                return StatusCode(500, "Ocurrió un error inesperado al obtener las vacantes con propuestas.");
+            }
+
         }
 
 

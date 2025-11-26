@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using TPFinalAvgustin.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace TPFinalAvgustin.Controllers.Api
 {
@@ -28,54 +29,64 @@ namespace TPFinalAvgustin.Controllers.Api
         public async Task<IActionResult> GetPagos(
              [FromQuery] int page = 1,
              [FromQuery] int size = 10,
-             [FromQuery] int? usuarioId = 0,
+             [FromQuery] bool? mine = false,
              [FromQuery] string? estado = null,
              [FromQuery] DateTime? fechaDesde = null,
              [FromQuery] DateTime? fechaHasta = null)
         {
-            Console.WriteLine("ID DEL USUARIO ENVIADO EN PETICION: ", usuarioId);
-            var query = _context.Pagos.AsQueryable();
-
-            if (usuarioId > 0)
-                query = query.Where(p => p.ContratadoId == usuarioId);
-
-            if (fechaDesde.HasValue)
-                query = query.Where(p => p.FechaCreacion >= fechaDesde.Value);
-
-            if (fechaHasta.HasValue)
-                query = query.Where(p => p.FechaCreacion <= fechaHasta.Value);
-            if (!string.IsNullOrEmpty(estado))
-                query = query.Where(p => p.Estado == estado);
-
-
-            var total = await query.CountAsync();
-
-            Console.WriteLine("HASTA ACA LLEGAMOS 2 ");
-
-            var items = await query
-                .OrderBy(c => c.Id)
-                .Skip((page - 1) * size)
-                .Take(size)
-                .Select(c => new
-                {
-                    c.Id,
-                    c.ContratoId,
-                    c.ContratanteId,
-                    c.ContratadoId,
-                    c.Monto,
-                    c.Estado,
-                    c.FechaPago,
-                    c.FechaCreacion
-                })
-                .ToListAsync();
-
-            return Ok(new
+            try
             {
-                total,
-                page,
-                size,
-                items
-            });
+                var query = _context.Pagos.AsQueryable();
+                var usuarioId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                Console.WriteLine("ID DEL USUARIO : ", usuarioId);
+                if (mine == true)
+                    query = query.Where(p => p.ContratadoId == usuarioId);
+
+                if (fechaDesde.HasValue)
+                    query = query.Where(p => p.FechaCreacion >= fechaDesde.Value);
+
+                if (fechaHasta.HasValue)
+                    query = query.Where(p => p.FechaCreacion <= fechaHasta.Value);
+                if (!string.IsNullOrEmpty(estado))
+                    query = query.Where(p => p.Estado == estado);
+
+
+                var total = await query.CountAsync();
+
+                Console.WriteLine("HASTA ACA LLEGAMOS 2 ");
+
+                var items = await query
+                    .OrderBy(c => c.Id)
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .Select(c => new
+                    {
+                        c.Id,
+                        c.ContratoId,
+                        c.ContratanteId,
+                        c.ContratadoId,
+                        c.Monto,
+                        c.Estado,
+                        c.FechaPago,
+                        c.FechaCreacion
+                    })
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    total,
+                    page,
+                    size,
+                    items
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error al obtener los pagos: " + ex.Message);
+                return StatusCode(500, "Error interno del servidor");
+            }
+
+
         }
 
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
